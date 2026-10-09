@@ -85,6 +85,25 @@ input[type=text],input[type=password],input[type=search],textarea{cursor:text}
 .btn.quiet{background:none;color:var(--walnut);outline:none;padding:10px 6px;text-decoration:underline;text-underline-offset:4px;box-shadow:none;min-height:0}
 .btn.quiet:hover{color:var(--rust);background:none}
 .btn[disabled]{opacity:.6}
+.btn svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.toolbar .btn{padding:13px 16px}
+.btn.cook{background:var(--walnut)}
+.btn.timer{background:var(--caramel);color:#fff8ea;outline-color:rgba(255,248,234,.75)}
+.btn.timer:hover{background:#9c7249}
+.btn.edit{background:var(--linen);color:var(--walnut);outline:none;box-shadow:inset 0 0 0 1.5px var(--caramel)}
+.btn.edit:hover{background:#fff8e8}
+.btn.heart{background:#ecd3c4;color:var(--rust);outline-color:rgba(147,87,58,.5);box-shadow:none}
+.btn.heart:hover{background:#e4c5b3}
+.btn.heart[aria-pressed=true]{background:var(--rust);color:#fff3e6;outline-color:rgba(255,243,230,.7)}
+.btn.heart[aria-pressed=true] svg{fill:currentColor}
+.btn.print{background:none;color:var(--ink-soft);outline:none;box-shadow:inset 0 0 0 1.5px var(--line)}
+.btn.print:hover{background:rgba(255,255,255,.35);color:var(--ink)}
+.btn.groq{background:#f3e2c0;color:var(--walnut);outline-color:var(--caramel);box-shadow:none}
+.btn.groq:hover{background:#ecd5a8}
+.btn.groq[disabled]{opacity:.7;cursor:progress}
+.methodtools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.gnote{margin:8px 0 0;font-size:16px;color:var(--ink-soft)}
+.gnote.err{color:#8a2f1f}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 
 /* ---- Forms ---- */
@@ -294,13 +313,21 @@ dialog p{font-size:20px}
 <div class="stitch" aria-hidden="true"></div>
 <main class="page" id="app"><p class="note">Opening the book…</p></main>
 <div id="toast" role="status" aria-live="polite"></div>
-<dialog id="dlg"><form method="dialog"><p id="dlgmsg"></p><div class="row"><button class="btn soft" value="no">Keep it</button><button class="btn" value="yes">Remove it</button></div></form></dialog>
+<dialog id="dlg"><form method="dialog"><p id="dlgmsg"></p><div class="row"><button class="btn soft" value="no" id="dlgno">Keep it</button><button class="btn" value="yes" id="dlgyes">Remove it</button></div></form></dialog>
 <dialog id="gdlg"><form method="dialog">
   <h2 style="font-size:26px">Save to Google Drive</h2>
   <p class="hint" id="gnote"></p>
   <div class="field"><label for="gcid">Google client ID</label><input id="gcid" type="text" autocapitalize="off" spellcheck="false" placeholder="1234567890-abc.apps.googleusercontent.com"></div>
   <p class="hint">Your recipes go in a folder called "Family Recipe Book" in your Drive. This page can only see that folder, nothing else.</p>
   <div class="row"><button class="btn" value="go">Save and connect</button><button class="btn soft" value="cancel">Cancel</button></div>
+</form></dialog>
+<dialog id="qdlg"><form method="dialog">
+  <h2 style="font-size:26px">Groq settings</h2>
+  <p class="hint">Groq reads your ingredient list and writes the method for you. Get a key at console.groq.com/keys. It stays in this browser only. It is not saved to Google Drive, backups or this web page, so do not use it on a shared computer.</p>
+  <div class="field"><label for="qkey">Groq API key</label><input id="qkey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="gsk_…"></div>
+  <div class="field"><label for="qmodel">Model</label><input id="qmodel" type="text" autocapitalize="off" spellcheck="false" placeholder="llama-3.3-70b-versatile"></div>
+  <p class="hint">If Groq ever says the model is gone, paste a newer name from console.groq.com/docs/models.</p>
+  <div class="row"><button class="btn" value="go">Save</button><button class="btn soft" value="cancel">Cancel</button><button class="btn quiet" value="forget">Remove key</button></div>
 </form></dialog>
 <div id="tray" aria-live="polite"></div>
 <dialog id="tdlg"><form method="dialog">
@@ -595,6 +622,70 @@ function openGSetup(){
     if(d.returnValue==='go'&&v){store.set('rb_gcid',v);G.client=null;connectDrive()}
   },{once:true});
   d.showModal();
+}
+
+/* ---------- Groq: write the method ---------- */
+const GROQ_URL='https://api.groq.com/openai/v1/chat/completions',GROQ_MODEL='llama-3.3-70b-versatile';
+const gqKey=()=>(store.get('rb_groq')||'').trim(),gqModel=()=>(store.get('rb_gmodel')||'').trim()||GROQ_MODEL;
+function openGroqSettings(after){
+  const d=$('#qdlg');$('#qkey').value=gqKey();$('#qmodel').value=store.get('rb_gmodel')||'';d.returnValue='';
+  d.addEventListener('close',()=>{
+    if(d.returnValue==='go'){
+      const k=$('#qkey').value.trim(),m=$('#qmodel').value.trim();
+      if(k)store.set('rb_groq',k);else store.del('rb_groq');
+      if(m)store.set('rb_gmodel',m);else store.del('rb_gmodel');
+      toast(k?'Groq key saved on this device.':'Groq key removed.');
+      if(k&&after)after();
+    }else if(d.returnValue==='forget'){store.del('rb_groq');toast('Groq key removed.')}
+  },{once:true});
+  d.showModal();
+}
+function gqNote(msg,bad){const n=$('#gqnote');if(!n)return;n.textContent=msg;n.hidden=!msg;n.classList.toggle('err',!!bad)}
+const GQ_SYSTEM=`You write the method (the numbered steps) for a home recipe book. A recipe name, optional details and an ingredient list are given. Reply with JSON only, shaped like {"steps":["...","..."]}.
+Rules:
+- Use only the listed ingredients plus water, heat and basic equipment. Never add an ingredient that is not listed.
+- Each step is one short, complete instruction for one stage of the cooking, written like a mother teaching her daughter. Do not combine stages. Do not number the steps and do not put "Step 1" in the text.
+- In every step that uses an ingredient, name the exact portion from the list, written the way the list writes it (cups, tablespoons, teaspoons, ounces, pounds, grams). Example: "Whisk 1 1/2 cups flour, 1 teaspoon baking soda and 1/2 teaspoon salt in a large bowl."
+- If an ingredient is split across steps, say which part goes where, such as "half of the butter (1/4 cup)", and make the parts add up to the listed amount.
+- Copy amounts from the list. Never invent or change an amount. If an ingredient has no amount, write "to taste" or "as needed".
+- Say how long to cook or rest and what to look for (color, texture), plus oven or stove temperature, whenever it helps. Use the prep, cook and total times given, if any.
+- Write 4 to 12 steps in the order a cook would do them.`;
+async function groqMethod(){
+  const g=id=>($(id)?.value||'').trim();
+  const ing=lines(g('#f-ing'),true);
+  if(!ing.length){gqNote('Add your ingredients first, one per line. Groq builds the method from them.',true);$('#f-ing').focus();return}
+  if(!gqKey()){openGroqSettings(groqMethod);return}
+  if(g('#f-steps')&&!await confirmBox('Replace the method you already wrote with one from Groq?','Replace it','Keep mine'))return;
+  const btn=$('#groqgo'),label=btn.innerHTML;btn.disabled=true;btn.lastChild.textContent='Groq is writing…';gqNote('');
+  const info=[['Recipe',g('#f-name')],['About',g('#f-desc')],['Makes',g('#f-yield')],['Prep time',g('#f-prep')],['Cook time',g('#f-cook')],['Total time',g('#f-total')]].filter(x=>x[1]).map(x=>x[0]+': '+x[1]).join('\n');
+  try{
+    const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),45000);
+    const res=await fetch(GROQ_URL,{method:'POST',signal:ctl.signal,headers:{'Content-Type':'application/json','Authorization':'Bearer '+gqKey()},
+      body:JSON.stringify({model:gqModel(),temperature:.3,response_format:{type:'json_object'},messages:[{role:'system',content:GQ_SYSTEM},{role:'user',content:(info?info+'\n':'')+'Ingredients:\n'+ing.map(x=>'- '+x).join('\n')}]})});
+    clearTimeout(to);
+    if(!res.ok){
+      let m='';try{m=(await res.json()).error?.message||''}catch{}
+      const e=new Error(m);e.status=res.status;throw e;
+    }
+    const j=await res.json();
+    let out=JSON.parse(j.choices[0].message.content);
+    let st=(Array.isArray(out)?out:out.steps);
+    if(!Array.isArray(st))throw new Error('shape');
+    st=st.map(x=>String(x&&x.text||x).trim().replace(/^(step\s*\d+\s*[:.)-]?\s*|\d+[.)]\s+)/i,'')).filter(Boolean);
+    if(!st.length)throw new Error('shape');
+    $('#f-steps').value=st.join('\n\n');
+    gqNote('Groq wrote '+st.length+' steps. Read them over and fix anything that does not match how you make it, then save.');
+  }catch(e){
+    const c=e.status;
+    gqNote(c===401?'Groq did not accept that key. Open Groq settings and paste it again.'
+      :c===429?'Groq says you have used up the free limit for now. Wait a minute and try again.'
+      :c===404||/model/i.test(e.message||'')&&c?'Groq could not find the model "'+gqModel()+'". Open Groq settings and choose a current one.'
+      :c?'Groq sent back an error: '+(e.message||c)
+      :e.name==='AbortError'?'Groq took too long. Try again.'
+      :e.message==='shape'||e instanceof SyntaxError?'Groq answered in a shape I could not read. Try again.'
+      :'I could not reach Groq. Check your connection and try again.',true);
+  }
+  btn.disabled=false;btn.innerHTML=label;
 }
 
 /* ---------- Scaling servings ---------- */
@@ -914,11 +1005,11 @@ async function renderRecipe(slug){
     ${r.description?`<p class="desc">${esc(r.description)}</p>`:''}
     ${facts.length?`<dl class="facts">${facts.map(f=>`<div><dt>${f[0]}</dt><dd${f[0]==='Makes'?' id="fact-yield"':''}>${esc(f[1])}</dd></div>`).join('')}</dl>`:''}
     <div class="toolbar">
-      <button class="btn" data-act="cook">Cook mode</button>
-      <button class="btn soft" data-act="tdlg">Timer</button>
-      <a class="btn soft" href="#/edit/${encodeURIComponent(r.slug)}">Edit</a>
-      <button class="btn soft" data-act="fav" aria-pressed="${isFav(r)}"><span>${isFav(r)?'Hearted':'Heart it'}</span></button>
-      <button class="btn soft" data-act="print">Print</button>
+      <button class="btn cook" data-act="cook"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z"/><path d="M2 11h2M20 11h2M8 7c0-1.5 1.5-1.5 1.5-3M13 7c0-1.5 1.5-1.5 1.5-3"/></svg>Cook mode</button>
+      <button class="btn timer" data-act="tdlg"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.5 2M9.5 2.5h5"/></svg>Timer</button>
+      <a class="btn edit" href="#/edit/${encodeURIComponent(r.slug)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit</a>
+      <button class="btn heart" data-act="fav" aria-pressed="${isFav(r)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg><span>${isFav(r)?'Hearted':'Heart it'}</span></button>
+      <button class="btn print" data-act="print"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6M7 17H4v-7h16v7h-3"/><rect x="7" y="14" width="10" height="7"/></svg>Print</button>
       <button class="btn quiet" data-act="del">Remove</button>
     </div>
   </header>
@@ -956,7 +1047,9 @@ async function renderEditor(slug){
       <div class="field"><label for="f-yield">Makes</label><input id="f-yield" type="text" placeholder="6 servings" value="${esc(r.yield)}"></div>
     </div>
     <div class="field"><label for="f-ing">Ingredients (one per line)</label><textarea id="f-ing" placeholder="2 cups flour&#10;1 egg">${esc(r.ingredients.join('\n'))}</textarea></div>
-    <div class="field"><label for="f-steps">Method (one step per line)</label><textarea id="f-steps" style="min-height:200px" placeholder="Heat the oven to 350°F.">${esc(r.steps.join('\n\n'))}</textarea></div>
+    <div class="field"><label for="f-steps">Method (one step per line)</label><textarea id="f-steps" style="min-height:200px" placeholder="Heat the oven to 350°F.">${esc(r.steps.join('\n\n'))}</textarea>
+      <div class="methodtools"><button type="button" class="btn groq" id="groqgo" data-act="groq"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18.5 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>Let Groq create the method</button><button type="button" class="btn quiet" data-act="groqset">Groq settings</button></div>
+      <p class="gnote" id="gqnote" role="status" aria-live="polite" hidden></p></div>
     <div class="two">
       <div class="field"><label for="f-cats">Categories (commas between)</label><input id="f-cats" type="text" placeholder="Dessert, Baking" value="${esc(r.categories.join(', '))}"></div>
       <div class="field"><label for="f-tags">Tags (commas between)</label><input id="f-tags" type="text" placeholder="Holiday, Family favorite" value="${esc(r.tags.join(', '))}"></div>
@@ -986,9 +1079,9 @@ window.addEventListener('hashchange',route);
 /* ---------- events ---------- */
 const lines=(s,bullets)=>s.split(/\n+/).map(x=>x.trim().replace(bullets?/^([-*•]\s+)/:/^(\d+[.)]\s+|[-*•]\s+)/,'')).filter(Boolean);
 const csv=s=>s.split(',').map(x=>x.trim()).filter(Boolean);
-function confirmBox(msg){
+function confirmBox(msg,yes,no){
   return new Promise(res=>{
-    const d=$('#dlg');$('#dlgmsg').textContent=msg;
+    const d=$('#dlg');$('#dlgmsg').textContent=msg;$('#dlgyes').textContent=yes||'Remove it';$('#dlgno').textContent=no||'Keep it';
     d.addEventListener('close',()=>res(d.returnValue==='yes'),{once:true});
     d.showModal();
   });
@@ -999,6 +1092,8 @@ document.addEventListener('click',async e=>{
   if(chip){S.cat=chip.dataset.cat;document.querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',c===chip));loadGrid(false);return}
   const b=e.target.closest('[data-act]');if(!b)return;
   const a=b.dataset.act;
+  if(a==='groq')return groqMethod();
+  if(a==='groqset')return openGroqSettings();
   if(a==='restore')return $('#restore').click();
   if(a==='backup'){
     const blob=new Blob([JSON.stringify({app:'family-recipe-book',version:1,saved:new Date().toISOString(),recipes:S.demo},null,1)],{type:'application/json'});
