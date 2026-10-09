@@ -250,6 +250,13 @@ dialog p{font-size:20px}
 <main class="page" id="app"><p class="note">Opening the book…</p></main>
 <div id="toast" role="status" aria-live="polite"></div>
 <dialog id="dlg"><form method="dialog"><p id="dlgmsg"></p><div class="row"><button class="btn soft" value="no">Keep it</button><button class="btn" value="yes">Remove it</button></div></form></dialog>
+<dialog id="gdlg"><form method="dialog">
+  <h2 style="font-size:26px">Save to Google Drive</h2>
+  <p class="hint" id="gnote"></p>
+  <div class="field"><label for="gcid">Google client ID</label><input id="gcid" type="text" autocapitalize="off" spellcheck="false" placeholder="1234567890-abc.apps.googleusercontent.com"></div>
+  <p class="hint">Your recipes go in a folder called "Family Recipe Book" in your Drive. This page can only see that folder, nothing else.</p>
+  <div class="row"><button class="btn" value="go">Save and connect</button><button class="btn soft" value="cancel">Cancel</button></div>
+</form></dialog>
 <noscript><p style="padding:80px 60px">This recipe book needs JavaScript to open.</p></noscript>
 
 <script>
@@ -267,7 +274,9 @@ const store={
 const uuid=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&3|8)).toString(16)});
 const slugify=s=>String(s).toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g,'').trim().replace(/[\s_-]+/g,'-')||'recipe';
 const app=$('#app');
-const S={mode:null,base:'',token:'',user:null,favs:new Set(),cats:[],org:{categories:null,tags:null},query:'',cat:'',onlyFavs:false,page:1,totalPages:1,demo:[],cur:null};
+/* Optional: paste your Google client ID between the quotes so every device works without typing it in. */
+const GOOGLE_CLIENT_ID='';
+const S={mode:null,base:'',token:'',user:null,favs:new Set(),cats:[],org:{categories:null,tags:null},query:'',cat:'',onlyFavs:false,page:1,totalPages:1,demo:[],deleted:{},cur:null};
 const API=()=>Book;
 const isFav=r=>!!r.fav;
 
@@ -355,9 +364,10 @@ const seed=()=>[
    categories:['Dessert'],tags:['Fall'],notes:'A mix of tart and sweet apples gives the best flavor.'}
 ].map((r,i)=>({...r,slug:slugify(r.name),id:'book-'+i,image:'',source:'',fav:i===0}));
 const Book={
-  persist(){
-    const ok=store.set('rb_recipes',JSON.stringify(S.demo));
+  persist(skipSync){
+    const ok=store.set('rb_recipes',JSON.stringify(S.demo))&store.set('rb_deleted',JSON.stringify(S.deleted));
     if(!ok)toast('This browser would not save that change. It will be gone when you close the page.');
+    if(!skipSync)Drive.schedule();
   },
   boot(){
     let d=null,from='';
@@ -365,7 +375,8 @@ const Book={
       try{const x=JSON.parse(store.get(k));if(Array.isArray(x)){d=x;from=k;break}}catch{}
     }
     S.demo=d||seed();
-    if(from!=='rb_recipes')Book.persist();
+    try{const x=JSON.parse(store.get('rb_deleted'));if(x&&typeof x==='object')S.deleted=x}catch{}
+    if(from!=='rb_recipes')Book.persist(true);
   },
   async list({page,query,cat,favs}){
     let a=S.demo.slice();
@@ -383,17 +394,157 @@ const Book={
       while(S.demo.some(x=>x.slug===s))s=base+'-'+n++;
       r={slug:s,id:'book-'+uuid(),image:'',fav:false};S.demo.unshift(r);
     }
-    Object.assign(r,{name:v.name,description:v.description,yield:v.yield,prep:v.prep,cook:v.cook,total:v.total,source:v.source,notes:v.notes,ingredients:v.ingredients,steps:v.steps,categories:v.categories,tags:v.tags});
+    Object.assign(r,{name:v.name,description:v.description,yield:v.yield,prep:v.prep,cook:v.cook,total:v.total,source:v.source,notes:v.notes,ingredients:v.ingredients,steps:v.steps,categories:v.categories,tags:v.tags,updated:Date.now()});
     if(file){try{r.image=await toDataURL(await shrink(file,800))}catch{toast('I could not read that photo.')}}
     Book.persist();return r.slug;
   },
-  async remove(r){S.demo=S.demo.filter(x=>x.slug!==r.slug);Book.persist()},
-  async fav(r,on){const x=S.demo.find(y=>y.slug===r.slug);if(x){x.fav=on;Book.persist()}}
+  async remove(r){S.demo=S.demo.filter(x=>x.slug!==r.slug);S.deleted[r.slug]=Date.now();Book.persist()},
+  async fav(r,on){const x=S.demo.find(y=>y.slug===r.slug);if(x){x.fav=on;x.updated=Date.now();Book.persist()}}
 };
+
+const cleanRecipe=(r,stamp)=>{
+  const arr=x=>Array.isArray(x)?x.map(String):[];
+  return{slug:String(r.slug||slugify(r.name)),id:String(r.id||'book-'+uuid()),name:String(r.name),description:String(r.description||''),yield:String(r.yield||''),prep:String(r.prep||''),cook:String(r.cook||''),total:String(r.total||''),
+    ingredients:arr(r.ingredients),steps:arr(r.steps),categories:arr(r.categories),tags:arr(r.tags),notes:String(r.notes||''),source:String(r.source||''),
+    image:/^data:image\//.test(r.image||'')?r.image:'',fav:!!r.fav,updated:Number(r.updated)||stamp};
+};
+
+/* ---------- Google Drive (optional cloud save) ---------- */
+const G={token:'',exp:0,client:null,folderId:'',fileId:'',lastMod:'',lastSync:0,busy:false,again:false,timer:0};
+const cid=()=>store.get('rb_gcid')||GOOGLE_CLIENT_ID;
+const canGoogle=()=>location.protocol==='https:'||location.hostname==='localhost';
+const BAR_TAIL='<button class="btn quiet" data-act="backup">Save a backup</button><button class="btn quiet" data-act="restore">Restore a backup</button><input type="file" id="restore" accept=".json,application/json" hidden>';
+function driveBar(){
+  if(G.token){
+    const t=G.busy?'Saving to Google Drive…':G.lastSync?'Saved to Google Drive at '+new Date(G.lastSync).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'Connected to Google Drive';
+    return `<span>${t}</span><button class="btn quiet" data-act="gsync">Sync now</button><button class="btn quiet" data-act="goff">Disconnect</button>`;
+  }
+  return `<span>Saved on this device</span><button class="btn quiet" data-act="gdrive">${store.get('rb_gd')==='1'?'Reconnect Google Drive':'Connect Google Drive'}</button>${store.get('rb_gcid')?'<button class="btn quiet" data-act="gcfg">Change client ID</button>':''}`;
+}
+function updateBar(){const t=$('#topline');if(t)t.innerHTML=driveBar()+BAR_TAIL}
+function loadGIS(){
+  if(window.google&&google.accounts&&google.accounts.oauth2)return Promise.resolve();
+  return new Promise((res,rej)=>{const sc=document.createElement('script');sc.src='https://accounts.google.com/gsi/client';sc.async=true;sc.onload=()=>res();sc.onerror=()=>rej(new Error('GIS'));document.head.appendChild(sc)});
+}
+function driveError(e){
+  const m=e&&e.message;
+  if(m==='GAUTH')toast('Google Drive needs you to sign in again to keep saving. Tap Reconnect Google Drive.');
+  else if(m==='NETWORK')toast('I could not reach Google Drive. Your recipes are still saved on this device.');
+  else toast(m||'Google Drive could not save.');
+  updateBar();
+}
+async function gfetch(url,opt={}){
+  if(!G.token||Date.now()>G.exp){G.token='';throw new Error('GAUTH')}
+  let r;
+  try{r=await fetch(url,{...opt,headers:{Authorization:'Bearer '+G.token,...(opt.headers||{})}})}catch{throw new Error('NETWORK')}
+  if(r.status===401){G.token='';throw new Error('GAUTH')}
+  if(!r.ok){const e=new Error(r.status===403?'Google Drive refused the request. Check that the Google Drive API is turned on for your project and that your account is a test user.':'Google Drive answered with an error ('+r.status+').');e.status=r.status;throw e}
+  return r;
+}
+async function ensureFolder(){
+  if(G.folderId)return G.folderId;
+  const q=encodeURIComponent("name='Family Recipe Book' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+  let j=await(await gfetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=1`)).json();
+  if(j.files&&j.files.length)G.folderId=j.files[0].id;
+  else{
+    j=await(await gfetch('https://www.googleapis.com/drive/v3/files?fields=id',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Family Recipe Book',mimeType:'application/vnd.google-apps.folder'})})).json();
+    G.folderId=j.id;
+  }
+  return G.folderId;
+}
+async function findFile(){
+  const q=encodeURIComponent(`name='recipes.json' and '${G.folderId}' in parents and trashed=false`);
+  const j=await(await gfetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,modifiedTime)&pageSize=1`)).json();
+  return(j.files&&j.files[0])||null;
+}
+async function uploadData(json){
+  if(G.fileId){
+    try{return await(await gfetch(`https://www.googleapis.com/upload/drive/v3/files/${G.fileId}?uploadType=media&fields=id,modifiedTime`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:json})).json()}
+    catch(e){if(e.status!==404)throw e;G.fileId=''}
+  }
+  const b='rb'+Math.random().toString(36).slice(2);
+  const meta=JSON.stringify({name:'recipes.json',parents:[G.folderId],mimeType:'application/json'});
+  const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${json}\r\n--${b}--`;
+  const j=await(await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,modifiedTime',{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+b},body})).json();
+  G.fileId=j.id;return j;
+}
+function mergeBooks(a,ad,b,bd){
+  const del={...ad};for(const k in bd)del[k]=Math.max(del[k]||0,bd[k]);
+  const map=new Map();
+  for(const r of[...a,...b]){const c=map.get(r.slug);if(!c||(r.updated||0)>(c.updated||0))map.set(r.slug,r)}
+  return{recipes:[...map.values()].filter(r=>!(del[r.slug]&&del[r.slug]>=(r.updated||0))),deleted:del};
+}
+async function syncNow(){
+  if(G.busy){G.again=true;return}
+  G.busy=true;updateBar();
+  let merged=false;
+  try{
+    await ensureFolder();
+    const f=await findFile();
+    if(f){
+      G.fileId=f.id;
+      if(f.modifiedTime!==G.lastMod){
+        const remote=await(await gfetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`)).json();
+        const rl=(Array.isArray(remote)?remote:remote.recipes||[]).filter(r=>r&&typeof r.name==='string').map(r=>cleanRecipe(r,0));
+        const rd=(remote&&remote.deleted&&typeof remote.deleted==='object')?remote.deleted:{};
+        const m=mergeBooks(S.demo,S.deleted,rl,rd);
+        merged=JSON.stringify(m.recipes)!==JSON.stringify(S.demo);
+        S.demo=m.recipes;S.deleted=m.deleted;Book.persist(true);
+      }
+    }
+    const out=await uploadData(JSON.stringify({app:'family-recipe-book',version:2,saved:new Date().toISOString(),recipes:S.demo,deleted:S.deleted}));
+    G.lastMod=out.modifiedTime;G.lastSync=Date.now();
+  }finally{
+    G.busy=false;updateBar();
+    if(G.again){G.again=false;Drive.schedule()}
+  }
+  if(merged&&!/^#\/(new|edit)/.test(location.hash))route();
+}
+const Drive={
+  schedule(){
+    if(!G.token)return;
+    if(Date.now()>G.exp){G.token='';updateBar();return}
+    clearTimeout(G.timer);G.timer=setTimeout(()=>syncNow().catch(driveError),1500);
+  }
+};
+async function connectDrive(){
+  if(!canGoogle()){toast('Google sign-in only works from the published web address of this page, not from a downloaded file.');return}
+  if(!cid()){openGSetup();return}
+  try{await loadGIS()}catch{toast("I couldn't load Google's sign-in. Check your connection and try again.");return}
+  if(!G.client){
+    G.client=google.accounts.oauth2.initTokenClient({
+      client_id:cid(),scope:'https://www.googleapis.com/auth/drive.file',
+      callback:async r=>{
+        if(!r||r.error||!r.access_token){toast(r&&r.error==='access_denied'?'Google Drive was not connected.':'Google sign-in did not finish. Please try again.');return}
+        G.token=r.access_token;G.exp=Date.now()+((Number(r.expires_in)||3600)-60)*1000;
+        store.set('rb_gd','1');updateBar();
+        try{await syncNow();toast('Connected. Your recipes are saved to Google Drive.')}catch(e){driveError(e)}
+      },
+      error_callback:e=>{if(e&&e.type!=='popup_closed')toast('Google sign-in was blocked. Allow pop-ups for this page and try again.')}
+    });
+  }
+  G.client.requestAccessToken({prompt:store.get('rb_gd')==='1'?'':'consent'});
+}
+function disconnectDrive(){
+  const t=G.token;
+  if(t&&window.google&&google.accounts&&google.accounts.oauth2)google.accounts.oauth2.revoke(t,()=>{});
+  G.token='';G.fileId='';G.folderId='';G.lastMod='';store.del('rb_gd');updateBar();
+  toast('Disconnected. Your recipes stay in the Drive folder and on this device.');
+}
+function openGSetup(){
+  const d=$('#gdlg');
+  $('#gnote').textContent=canGoogle()?'Paste the client ID from your Google Cloud project. You only need to do this once on this device.':'Google sign-in only works once this page is published at a web address, such as GitHub Pages. Open the published page to connect.';
+  $('#gcid').value=cid();
+  d.addEventListener('close',()=>{
+    const v=$('#gcid').value.trim();
+    if(d.returnValue==='go'&&v){store.set('rb_gcid',v);G.client=null;connectDrive()}
+  },{once:true});
+  d.showModal();
+}
 
 /* ---------- views ---------- */
 function masthead(){
-  return `<header class="masthead"><div class="topline"><span>Saved on this device</span><button class="btn quiet" data-act="backup">Save a backup</button><button class="btn quiet" data-act="restore">Restore a backup</button><input type="file" id="restore" accept=".json,application/json" hidden></div><p class="script">from our kitchen to yours</p><h1 class="book-title"><a href="#/">The Family Recipe Book</a></h1>${divider()}</header>`;
+  return `<header class="masthead"><div class="topline" id="topline">${driveBar()}${BAR_TAIL}</div><p class="script">from our kitchen to yours</p><h1 class="book-title"><a href="#/">The Family Recipe Book</a></h1>${divider()}</header>`;
 }
 const slim=(extra='')=>`<div class="slim"><a class="btn soft" href="#/">&larr; All recipes</a><span class="t"><a href="#/">The Family Recipe Book</a></span>${extra}</div>`;
 
@@ -545,6 +696,10 @@ document.addEventListener('click',async e=>{
     document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);
     toast('Backup saved to your downloads.');return;
   }
+  if(a==='gdrive')return connectDrive();
+  if(a==='gcfg')return openGSetup();
+  if(a==='gsync')return syncNow().then(()=>toast('Synced with Google Drive.')).catch(driveError);
+  if(a==='goff')return disconnectDrive();
   if(a==='more'){S.page++;return loadGrid(true)}
   if(a==='onlyfav'){S.onlyFavs=!S.onlyFavs;b.setAttribute('aria-pressed',S.onlyFavs);return loadGrid(false)}
   if(a==='print')return window.print();
@@ -593,14 +748,12 @@ document.addEventListener('change',async e=>{
     const d=JSON.parse(await f.text());
     const list=Array.isArray(d)?d:d.recipes;
     if(!Array.isArray(list)||!list.length||!list.every(r=>r&&typeof r.name==='string'))throw new Error('bad');
-    const arr=x=>Array.isArray(x)?x.map(String):[];
     let n=0;
     for(const r of list){
-      const rec={slug:String(r.slug||slugify(r.name)),id:String(r.id||'book-'+uuid()),name:r.name,description:String(r.description||''),yield:String(r.yield||''),prep:String(r.prep||''),cook:String(r.cook||''),total:String(r.total||''),
-        ingredients:arr(r.ingredients),steps:arr(r.steps),categories:arr(r.categories),tags:arr(r.tags),notes:String(r.notes||''),source:String(r.source||''),
-        image:/^data:image\//.test(r.image||'')?r.image:'',fav:!!r.fav};
+      const rec=cleanRecipe(r,Date.now());
       const i=S.demo.findIndex(x=>x.slug===rec.slug);
       if(i>=0)S.demo[i]=rec;else S.demo.push(rec);
+      delete S.deleted[rec.slug];
       n++;
     }
     Book.persist();toast(`Restored ${n} recipe${n===1?'':'s'}.`);route();
@@ -611,6 +764,7 @@ document.addEventListener('change',async e=>{
 decorate();
 Book.boot();
 route();
+if(cid()&&canGoogle())loadGIS().catch(()=>{});
 })();
 </script>
 </body>
