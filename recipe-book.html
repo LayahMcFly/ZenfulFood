@@ -210,9 +210,54 @@ dialog p{font-size:20px}
   .ings{padding:16px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}.card{transform:none!important}}
+/* ---- Servings, timers, cook mode, dinner ---- */
+.scaler{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px;padding-bottom:12px;border-bottom:1.5px dashed var(--caramel)}
+.scaler .lab{font:700 12px/1 var(--label);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin-right:2px}
+.scaler .sb{width:40px;height:40px;min-height:0;padding:0;border:1px solid var(--caramel);background:var(--linen);color:var(--walnut);font:700 22px/1 var(--label);border-radius:3px}
+.scaler .sb:hover{background:#fff8e8}
+.scaler output{font:400 28px/1 var(--display);min-width:2ch;text-align:center}
+.dur{font:inherit;color:var(--rust);background:none;border:0;border-bottom:1.5px dotted var(--rust);padding:0;margin:0;border-radius:0}
+.dur:hover{background:rgba(147,87,58,.12)}
+.pre{font:700 12px/1 var(--label);letter-spacing:.08em;text-transform:uppercase;background:var(--linen);color:var(--walnut);border:1px solid var(--caramel);border-radius:3px;padding:10px 12px;min-height:40px}
+.pre:hover{background:#fff8e8}
+.chk{display:flex;gap:10px;align-items:center;font:400 17px/1.3 var(--body);letter-spacing:0;text-transform:none;color:var(--ink)}
+.chk input{width:18px;height:18px;min-height:0;padding:0;accent-color:var(--walnut)}
+#tdlg form,#ndlg form{display:grid;gap:16px}
+#ndlg{width:min(92vw,460px)}
+#ndlg .photo{width:100%}
+#ndlg h3{font-size:28px}
+#ndlg .meta{font:400 12px/1.5 var(--label);letter-spacing:.06em;color:var(--ink-soft);text-transform:uppercase}
+#tray{position:fixed;right:calc(var(--fw) + 12px);bottom:calc(var(--fw) + 12px);z-index:66;display:grid;gap:8px;width:min(calc(100vw - 2*var(--fw) - 24px),300px)}
+#tray:empty{display:none}
+.tmr{background:var(--walnut);color:var(--linen);padding:12px 14px;border-radius:3px;display:grid;gap:6px;outline:1.5px dashed rgba(247,239,223,.6);outline-offset:-5px;box-shadow:0 12px 20px -12px var(--shadow)}
+.tmr .t{font:700 28px/1 var(--label);letter-spacing:.02em}
+.tmr .l{font-size:16px;opacity:.92;overflow-wrap:anywhere}
+.tmr .b{display:flex;gap:6px;flex-wrap:wrap}
+.tmr .b button{font:700 11px/1 var(--label);letter-spacing:.08em;text-transform:uppercase;background:rgba(247,239,223,.16);color:var(--linen);border:1px solid rgba(247,239,223,.5);border-radius:3px;padding:9px 10px;min-height:36px}
+.tmr .b button:hover{background:rgba(247,239,223,.3)}
+.tmr.pause{background:var(--ink-soft)}
+.tmr.done{background:var(--rust);animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(1.03)}}
+#cook{position:fixed;inset:0;z-index:55;background:var(--paper);overflow:auto;padding:calc(var(--fw) + 14px) calc(var(--fw) + clamp(14px,4vw,40px)) calc(var(--fw) + 14px)}
+#cook .wrap{max-width:860px;margin:0 auto;min-height:100%;display:grid;grid-template-rows:auto auto 1fr auto;gap:16px}
+.ck-top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start}
+.ck-count{font:400 22px/1.2 var(--display);margin-top:4px}
+.ck-bar{height:7px;background:var(--line);border-radius:4px;overflow:hidden}
+.ck-bar span{display:block;height:100%;background:var(--rust);transition:width .25s}
+.ck-main{align-self:center;padding:8px 0}
+.ck-step{font:400 clamp(26px,5.4vw,44px)/1.35 var(--body);overflow-wrap:anywhere}
+#cook .dur{background:rgba(147,87,58,.14);border-bottom:0;padding:0 8px;border-radius:3px}
+#cook .ings{max-width:none}
+#cook .ings label{font-size:21px}
+#cook .ings ul{columns:1}
+@media (min-width:700px){#cook .ings ul{columns:2;column-gap:30px}}
+.ck-nav{display:flex;gap:10px;flex-wrap:wrap}
+.ck-nav .btn{flex:1 1 120px;min-height:58px;font-size:14px}
+.ck-nav .btn.go{flex:2 1 200px}
 @page{margin:14mm}
 @media print{
-  .frame,.stitch,.toolbar,.slim,.topline,#toast,dialog{display:none!important}
+  .frame,.stitch,.toolbar,.slim,.topline,#toast,dialog,.scaler,#tray,#cook{display:none!important}
+  .dur{border:0;color:inherit}
   html,body{height:auto;min-height:0;background:#fff!important;background-image:none!important;font-size:15px}
   .page{padding:0;max-width:none;margin:0;min-height:0}
   .card,.ings,.margin-note{box-shadow:none;transform:none}
@@ -257,6 +302,16 @@ dialog p{font-size:20px}
   <p class="hint">Your recipes go in a folder called "Family Recipe Book" in your Drive. This page can only see that folder, nothing else.</p>
   <div class="row"><button class="btn" value="go">Save and connect</button><button class="btn soft" value="cancel">Cancel</button></div>
 </form></dialog>
+<div id="tray" aria-live="polite"></div>
+<dialog id="tdlg"><form method="dialog">
+  <h2 style="font-size:26px">Set a timer</h2>
+  <div class="row"><button type="button" class="pre" data-act="tpre" data-min="5">5 min</button><button type="button" class="pre" data-act="tpre" data-min="10">10 min</button><button type="button" class="pre" data-act="tpre" data-min="15">15 min</button><button type="button" class="pre" data-act="tpre" data-min="30">30 min</button><button type="button" class="pre" data-act="tpre" data-min="60">1 hour</button></div>
+  <div class="field"><label for="tmin">Minutes</label><input id="tmin" type="number" inputmode="decimal" min="0.1" step="any" value="10"></div>
+  <div class="field"><label for="tlab">What is it for? (optional)</label><input id="tlab" type="text" placeholder="Rice"></div>
+  <p class="hint">Keep this page open. Phones can pause timers when the screen turns off.</p>
+  <div class="row"><button class="btn" value="go">Start timer</button><button class="btn soft" value="cancel">Cancel</button></div>
+</form></dialog>
+<dialog id="ndlg"><form method="dialog"><h2 style="font-size:26px">What's for dinner?</h2><div id="ndbody"></div></form></dialog>
 <noscript><p style="padding:80px 60px">This recipe book needs JavaScript to open.</p></noscript>
 
 <script>
@@ -276,7 +331,7 @@ const slugify=s=>String(s).toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g,'
 const app=$('#app');
 /* Optional: paste your Google client ID between the quotes so every device works without typing it in. */
 const GOOGLE_CLIENT_ID='';
-const S={mode:null,base:'',token:'',user:null,favs:new Set(),cats:[],org:{categories:null,tags:null},query:'',cat:'',onlyFavs:false,page:1,totalPages:1,demo:[],deleted:{},cur:null};
+const S={mode:null,base:'',token:'',user:null,favs:new Set(),cats:[],org:{categories:null,tags:null},query:'',cat:'',onlyFavs:false,page:1,totalPages:1,demo:[],deleted:{},cur:null,checked:new Set(),f:1,base:0,target:0,label:''};
 const API=()=>Book;
 const isFav=r=>!!r.fav;
 
@@ -406,7 +461,7 @@ const cleanRecipe=(r,stamp)=>{
   const arr=x=>Array.isArray(x)?x.map(String):[];
   return{slug:String(r.slug||slugify(r.name)),id:String(r.id||'book-'+uuid()),name:String(r.name),description:String(r.description||''),yield:String(r.yield||''),prep:String(r.prep||''),cook:String(r.cook||''),total:String(r.total||''),
     ingredients:arr(r.ingredients),steps:arr(r.steps),categories:arr(r.categories),tags:arr(r.tags),notes:String(r.notes||''),source:String(r.source||''),
-    image:/^data:image\//.test(r.image||'')?r.image:'',fav:!!r.fav,updated:Number(r.updated)||stamp};
+    image:/^data:image\//.test(r.image||'')||/^https:\/\/(www\.)?themealdb\.com\//.test(r.image||'')?r.image:'',fav:!!r.fav,updated:Number(r.updated)||stamp};
 };
 
 /* ---------- Google Drive (optional cloud save) ---------- */
@@ -542,6 +597,258 @@ function openGSetup(){
   d.showModal();
 }
 
+/* ---------- Scaling servings ---------- */
+const FRAC={'½':.5,'⅓':1/3,'⅔':2/3,'¼':.25,'¾':.75,'⅛':.125,'⅜':.375,'⅝':.625,'⅞':.875};
+const NUMSRC=String.raw`(?:\d+\s+\d+\/\d+|\d+\/\d+|\d*\.\d+|\d+[½⅓⅔¼¾⅛⅜⅝⅞]?|[½⅓⅔¼¾⅛⅜⅝⅞])`;
+function parseQty(t){
+  t=t.trim();let m;
+  if((m=t.match(/^(\d+)\s+(\d+)\/(\d+)$/)))return +m[1]+m[2]/m[3];
+  if((m=t.match(/^(\d+)\/(\d+)$/)))return m[1]/m[2];
+  if((m=t.match(/^(\d*)([½⅓⅔¼¾⅛⅜⅝⅞])$/)))return(+m[1]||0)+FRAC[m[2]];
+  return parseFloat(t);
+}
+const NICE=[[0,''],[1/8,'1/8'],[1/4,'1/4'],[1/3,'1/3'],[3/8,'3/8'],[1/2,'1/2'],[5/8,'5/8'],[2/3,'2/3'],[3/4,'3/4'],[7/8,'7/8'],[1,'']];
+function fmtQty(x){
+  let whole=Math.floor(x+1e-9),fr=x-whole,best=NICE[0],d=9;
+  for(const n of NICE){const k=Math.abs(n[0]-fr);if(k<d){d=k;best=n}}
+  if(best[0]===1){whole++;best=NICE[0]}
+  if(!whole&&!best[1])return'1/8';
+  return[whole||'',best[1]].filter(Boolean).join(' ');
+}
+function scaleLine(t,f){
+  if(Math.abs(f-1)<1e-9)return t;
+  const lead=new RegExp(String.raw`^(${NUMSRC})(?:(\s*(?:-|–|to)\s*)(${NUMSRC}))?`);
+  let out=t.replace(lead,(m,a,sep,b)=>fmtQty(parseQty(a)*f)+(b?sep+fmtQty(parseQty(b)*f):''));
+  out=out.replace(/\((about|approx\.?|roughly|around)\s+([^)]*)\)/gi,(m,w,inner)=>'('+w+' '+inner.replace(new RegExp(NUMSRC,'g'),n=>fmtQty(parseQty(n)*f))+')');
+  return out;
+}
+function scaleInit(r){
+  S.checked=new Set();S.f=1;
+  const y=String(r.yield||'');
+  let m=y.match(/^\s*(\d+(?:\.\d+)?)(?:\s*(?:-|–|to)\s*\d+(?:\.\d+)?)?\s*(.*)$/i);
+  if(m){S.base=+m[1];S.label=m[2].trim()||'servings'}
+  else if((m=y.match(/(\d+(?:\.\d+)?)/))){S.base=+m[1];S.label='servings'}
+  else{S.base=0;S.label=''}
+  S.target=S.base;
+}
+function ingListHTML(pre){
+  const r=S.cur;
+  if(!r.ingredients.length)return'<p class="note">No ingredients written down yet.</p>';
+  return`<ul>${r.ingredients.map((t,i)=>`<li><label for="${pre}${i}"><input type="checkbox" id="${pre}${i}" data-ing="${i}" ${S.checked.has(i)?'checked':''}><span>${esc(scaleLine(t,S.f))}</span></label></li>`).join('')}</ul>`;
+}
+function applyScale(){
+  S.f=S.base>0?S.target/S.base:1;
+  const sv=$('#sval');if(sv)sv.textContent=S.target;
+  const w=$('#ing-wrap');if(w)w.innerHTML=ingListHTML('ing');
+  const fy=$('#fact-yield');if(fy)fy.textContent=S.target+' '+S.label;
+  if(CK.on)cookRender();
+}
+
+/* ---------- Timers ---------- */
+const UNITRE='(?:hours?|hrs?|minutes?|mins?|seconds?|secs?)';
+const DURRE=new RegExp('(\\d+(?:\\.\\d+)?)(?:\\s*(?:to|-|–)\\s*(\\d+(?:\\.\\d+)?))?\\s*('+UNITRE+')\\b(?:(?:\\s*(?:and|,)?\\s*)(\\d+(?:\\.\\d+)?)\\s*('+UNITRE+')\\b)?','gi');
+const unitMul=u=>/^h/i.test(u)?3600:/^m/i.test(u)?60:1;
+const durSec=(n,u,n2,u2)=>Math.round(n*unitMul(u)+(n2?n2*unitMul(u2):0));
+function stepHTML(t){
+  let out='',last=0;
+  t.replace(DURRE,(m,a,b,u,a2,u2,off)=>{
+    out+=esc(t.slice(last,off));
+    out+=`<button type="button" class="dur" data-act="timer" data-sec="${durSec(+a,u,a2&&+a2,u2)}" data-label="${esc(m)}" title="Start a timer">${esc(m)}</button>`;
+    last=off+m.length;return m;
+  });
+  return out+esc(t.slice(last));
+}
+const TM={list:[],loop:0,alarm:0,sig:'',AC:null,title:document.title};
+const fmtClock=s=>{s=Math.max(0,Math.ceil(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')};
+const fmtDur=sec=>sec>=3600?(Math.round(sec/360)/10)+' hr':(Math.round(sec/6)/10)+' min';
+function tmSave(){store.set('rb_timers',JSON.stringify(TM.list.filter(t=>t.state!=='done')))}
+function tmLoad(){
+  try{
+    const a=JSON.parse(store.get('rb_timers'));
+    if(Array.isArray(a))TM.list=a.filter(t=>t&&t.id&&((t.state==='run'&&Number(t.end)>0)||(t.state==='pause'&&Number(t.left)>=0)));
+  }catch{}
+  if(TM.list.length){tmRender();ensureLoop()}
+}
+function ensureLoop(){if(!TM.loop)TM.loop=setInterval(tmTick,250)}
+function beep(){
+  try{
+    TM.AC=TM.AC||new(window.AudioContext||window.webkitAudioContext)();
+    const ac=TM.AC;if(ac.resume)ac.resume();
+    const t=ac.currentTime;
+    [0,.35,.7].forEach(d=>{
+      const o=ac.createOscillator(),g=ac.createGain();
+      o.type='sine';o.frequency.value=880;
+      g.gain.setValueAtTime(.0001,t+d);g.gain.exponentialRampToValueAtTime(.3,t+d+.02);g.gain.exponentialRampToValueAtTime(.0001,t+d+.3);
+      o.connect(g);g.connect(ac.destination);o.start(t+d);o.stop(t+d+.32);
+    });
+  }catch{}
+}
+function alarmStart(){
+  if(TM.alarm)return;
+  let n=0;
+  const go=()=>{beep();try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch{}if(++n>=20)alarmStop()};
+  go();TM.alarm=setInterval(go,3000);
+  document.title='Timer done · '+TM.title;
+}
+function alarmStop(){clearInterval(TM.alarm);TM.alarm=0;document.title=TM.title}
+function tmStart(sec,label){
+  if(!(sec>0))return;
+  try{TM.AC=TM.AC||new(window.AudioContext||window.webkitAudioContext)();TM.AC.resume&&TM.AC.resume()}catch{}
+  TM.list.push({id:uuid(),label:label||fmtDur(sec),total:sec,end:Date.now()+sec*1000,state:'run'});
+  tmSave();ensureLoop();tmRender();
+  toast('Timer started: '+(label||fmtDur(sec)));
+}
+function tmTick(){
+  const now=Date.now();let fired=false;
+  for(const t of TM.list)if(t.state==='run'&&now>=t.end){t.state='done';fired=true}
+  if(fired){tmSave();alarmStart()}
+  tmRender();
+  if(!TM.list.some(t=>t.state==='run')){clearInterval(TM.loop);TM.loop=0}
+}
+function tmRender(){
+  const tray=$('#tray');if(!tray)return;
+  const sig=TM.list.map(t=>t.id+t.state).join('|');
+  if(sig!==TM.sig){
+    TM.sig=sig;
+    tray.innerHTML=TM.list.map(t=>`<div class="tmr ${t.state}" data-id="${esc(t.id)}"><span class="t" data-t></span><span class="l">${esc(t.label)}</span><div class="b">${
+      t.state==='done'?`<button data-act="tstop" data-id="${esc(t.id)}">Dismiss</button>`
+      :(t.state==='run'?`<button data-act="tpause" data-id="${esc(t.id)}">Pause</button>`:`<button data-act="tresume" data-id="${esc(t.id)}">Resume</button>`)+`<button data-act="tstop" data-id="${esc(t.id)}">Stop</button>`
+    }</div></div>`).join('');
+  }
+  for(const t of TM.list){
+    const el=tray.querySelector(`[data-id="${t.id}"] [data-t]`);
+    if(el)el.textContent=t.state==='done'?'Done!':fmtClock(t.state==='run'?(t.end-Date.now())/1000:t.left);
+  }
+}
+function tmAct(a,id){
+  const t=TM.list.find(x=>x.id===id);if(!t)return;
+  if(a==='tpause'){t.left=Math.ceil((t.end-Date.now())/1000);t.state='pause'}
+  else if(a==='tresume'){t.end=Date.now()+t.left*1000;t.state='run';ensureLoop()}
+  else if(a==='tstop'){TM.list=TM.list.filter(x=>x!==t);if(!TM.list.some(x=>x.state==='done'))alarmStop()}
+  tmSave();tmRender();
+}
+function openTimerDialog(){
+  const d=$('#tdlg');
+  $('#tmin').value=10;$('#tlab').value='';d.returnValue='';
+  d.addEventListener('close',()=>{
+    if(d.returnValue!=='go')return;
+    const m=parseFloat($('#tmin').value);
+    if(m>0)tmStart(Math.round(m*60),$('#tlab').value.trim()||fmtDur(m*60));else toast('Enter how many minutes.');
+  },{once:true});
+  d.showModal();
+}
+
+/* ---------- Cook mode ---------- */
+const CK={on:false,i:0,sheet:false,wl:null,x:0,y:0};
+async function wakeOn(){try{if('wakeLock' in navigator)CK.wl=await navigator.wakeLock.request('screen')}catch{}}
+function wakeOff(){try{CK.wl&&CK.wl.release()}catch{}CK.wl=null}
+document.addEventListener('visibilitychange',()=>{if(CK.on&&document.visibilityState==='visible')wakeOn()});
+function cookOpen(){
+  const r=S.cur;
+  if(!r||!r.steps.length){toast('This recipe has no steps yet.');return}
+  CK.on=true;CK.i=0;CK.sheet=false;
+  let el=$('#cook');
+  if(!el){el=document.createElement('div');el.id='cook';el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');el.setAttribute('aria-label','Cook mode');document.body.appendChild(el)}
+  document.body.style.overflow='hidden';
+  cookRender();wakeOn();
+}
+function cookClose(){
+  CK.on=false;const el=$('#cook');if(el)el.remove();
+  document.body.style.overflow='';wakeOff();
+}
+function cookRender(){
+  const el=$('#cook'),r=S.cur;if(!el||!r)return;
+  const n=r.steps.length,i=CK.i,showIngs=(i===0||CK.sheet);
+  el.innerHTML=`<div class="wrap">
+    <div class="ck-top"><div><p class="eyebrow">${esc(r.name)}</p><p class="ck-count">${i===0?'Gather your ingredients':'Step '+i+' of '+n}</p></div><button class="btn soft" data-act="ckexit">Exit</button></div>
+    <div class="ck-bar" aria-hidden="true"><span style="width:${Math.round(i/n*100)}%"></span></div>
+    <div class="ck-main">${showIngs?`<section class="ings"><h2>Ingredients${S.base>0&&S.f!==1?' (for '+esc(S.target+' '+S.label)+')':''}</h2>${ingListHTML('ck')}</section>`:`<p class="ck-step">${stepHTML(r.steps[i-1])}</p>`}</div>
+    <div class="ck-nav">
+      <button class="btn soft" data-act="ckprev" ${i===0?'disabled':''}>Back</button>
+      ${i>0?`<button class="btn soft" data-act="ckings">${CK.sheet?'Back to the step':'Ingredients'}</button>`:''}
+      <button class="btn go" data-act="cknext">${i===n?'Finished':(i===0?'Start cooking':'Next step')}</button>
+    </div></div>`;
+  el.scrollTop=0;
+}
+function cookGo(d){
+  const n=S.cur.steps.length,j=CK.i+d;
+  if(j>n){cookClose();toast('Enjoy your meal!');return}
+  if(j<0)return;
+  CK.i=j;CK.sheet=false;cookRender();
+}
+document.addEventListener('keydown',e=>{
+  if(!CK.on)return;
+  if(e.key==='ArrowRight')cookGo(1);
+  else if(e.key==='ArrowLeft')cookGo(-1);
+  else if(e.key==='Escape'&&!document.querySelector('dialog[open]')){e.preventDefault();cookClose()}
+});
+document.addEventListener('touchstart',e=>{if(CK.on&&e.touches[0]){CK.x=e.touches[0].clientX;CK.y=e.touches[0].clientY}},{passive:true});
+document.addEventListener('touchend',e=>{
+  if(!CK.on||!e.changedTouches[0]||e.target.closest('button'))return;
+  const dx=e.changedTouches[0].clientX-CK.x,dy=e.changedTouches[0].clientY-CK.y;
+  if(Math.abs(dx)>80&&Math.abs(dy)<60)cookGo(dx<0?1:-1);
+},{passive:true});
+
+/* ---------- What's for dinner? ---------- */
+const MEALDB_KEY='1'; /* TheMealDB's free test key. See themealdb.com/api.php if you want to publish widely. */
+const ND={last:'',fav:false,web:null};
+function ndOpen(){
+  const d=$('#ndlg');ND.web=null;ndBook();
+  if(!d.open)d.showModal();
+}
+function ndBook(){
+  const body=$('#ndbody');
+  const pool=ND.fav?S.demo.filter(r=>r.fav):S.demo;
+  const row=extra=>`<div class="row">${extra}<button type="button" class="btn soft" data-act="ndweb">Try something new</button><button type="button" class="btn quiet" data-act="ndclose">Close</button></div>`;
+  const toggle=`<label class="chk"><input type="checkbox" id="ndfav" ${ND.fav?'checked':''}> Only hearted recipes</label>`;
+  if(!pool.length){
+    body.innerHTML=`<p class="hint">${ND.fav?'No hearted recipes yet. Heart a few, or turn that off.':'Your book is empty. Add a recipe first, or try something new from the web.'}</p>${toggle}${row('')}`;return;
+  }
+  let r;do{r=pool[Math.random()*pool.length|0]}while(pool.length>1&&r.slug===ND.last);
+  ND.last=r.slug;
+  body.innerHTML=`<p class="eyebrow">From your book</p><div class="photo">${imgTag(r.image,'')}</div><h3>${esc(r.name)}</h3><p class="meta">${esc(metaLine(r))}</p>${toggle}
+  ${row(`<a class="btn" href="#/recipe/${encodeURIComponent(r.slug)}" data-act="ndclose">Open this recipe</a><button type="button" class="btn soft" data-act="ndagain">Another one</button>`)}`;
+}
+function mealToRecipe(m){
+  const ing=[];
+  for(let i=1;i<=20;i++){const a=(m['strIngredient'+i]||'').trim(),b=(m['strMeasure'+i]||'').trim();if(a)ing.push((b?b+' ':'')+a)}
+  const steps=String(m.strInstructions||'').split(/\r?\n+/).map(x=>x.trim().replace(/^(step\s*\d+\s*[:.)-]?\s*|\d+[.)]\s+)/i,'')).filter(x=>x&&!/^step\s*\d*$/i.test(x));
+  const tags=[m.strArea].concat(String(m.strTags||'').split(',')).map(x=>(x||'').trim()).filter(x=>x&&x!=='Unknown');
+  return{id:m.idMeal,name:m.strMeal,thumb:/^https:\/\/(www\.)?themealdb\.com\//.test(m.strMealThumb||'')?m.strMealThumb:'',
+    description:`${m.strArea&&m.strArea!=='Unknown'?m.strArea+' ':''}${String(m.strCategory||'').toLowerCase()} recipe from TheMealDB.`.replace(/^\s+/,''),
+    categories:m.strCategory?[m.strCategory]:[],tags,ingredients:ing,steps,source:'https://www.themealdb.com/meal/'+m.idMeal};
+}
+async function ndWeb(){
+  const body=$('#ndbody');
+  body.innerHTML='<p class="note">Looking through someone else\'s cookbook…</p>';
+  try{
+    const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),10000);
+    const res=await fetch(`https://www.themealdb.com/api/json/v1/${MEALDB_KEY}/random.php`,{signal:ctl.signal});
+    clearTimeout(to);
+    if(!res.ok)throw new Error('x');
+    const j=await res.json();
+    if(!j.meals||!j.meals[0])throw new Error('x');
+    const m=ND.web=mealToRecipe(j.meals[0]);
+    body.innerHTML=`<p class="eyebrow">From TheMealDB</p><div class="photo">${imgTag(m.thumb,m.name)}</div><h3>${esc(m.name)}</h3><p class="meta">${esc([m.tags[0],m.categories[0],m.ingredients.length+' ingredients'].filter(Boolean).join(' · '))}</p>
+    <p class="hint">This one is not in your book yet.</p>
+    <div class="row"><button type="button" class="btn" data-act="ndsave">Save to my book</button><button type="button" class="btn soft" data-act="ndweb">Another one</button><button type="button" class="btn soft" data-act="ndbook">Back to my book</button></div>`;
+  }catch(e){console.warn('mealdb',e);
+    body.innerHTML=`<p class="err" role="alert">I couldn't reach TheMealDB right now. Check your connection and try again.</p><div class="row"><button type="button" class="btn soft" data-act="ndbook">Back to my book</button><button type="button" class="btn quiet" data-act="ndclose">Close</button></div>`;
+  }
+}
+async function ndSave(){
+  const m=ND.web;if(!m)return;
+  const ex=S.demo.find(r=>r.name.toLowerCase()===m.name.toLowerCase());
+  if(ex){toast('That recipe is already in your book.');$('#ndlg').close();location.hash='#/recipe/'+encodeURIComponent(ex.slug);return}
+  const slug=await Book.save({name:m.name,description:m.description,yield:'',prep:'',cook:'',total:'',source:m.source,notes:'',ingredients:m.ingredients,steps:m.steps,categories:m.categories,tags:m.tags},null,null);
+  const r=S.demo.find(x=>x.slug===slug);
+  if(r&&m.thumb){
+    try{const b=await(await fetch(m.thumb)).blob();r.image=await toDataURL(await shrink(b,800))}catch{r.image=m.thumb}
+    r.updated=Date.now();Book.persist();
+  }
+  toast('Saved to your book.');$('#ndlg').close();location.hash='#/recipe/'+encodeURIComponent(slug);
+}
+
 /* ---------- views ---------- */
 function masthead(){
   return `<header class="masthead"><div class="topline" id="topline">${driveBar()}${BAR_TAIL}</div><p class="script">from our kitchen to yours</p><h1 class="book-title"><a href="#/">The Family Recipe Book</a></h1>${divider()}</header>`;
@@ -553,6 +860,7 @@ async function renderHome(){
   <div class="controls">
     <input class="search" id="q" type="search" placeholder="Search by name or ingredient" aria-label="Search recipes" value="${esc(S.query)}">
     <button class="btn soft" id="onlyfav" aria-pressed="${S.onlyFavs}" data-act="onlyfav">Hearted</button>
+    <button class="btn soft" data-act="dinner">What's for dinner?</button>
     <a class="btn" href="#/new">Add a recipe</a>
   </div>
   <div class="chips" id="chips"></div>
@@ -597,15 +905,17 @@ async function renderRecipe(slug){
     if(e.message==='AUTH')return;
     app.innerHTML=slim()+`<p class="err" role="alert">${esc(e.status===404?'I could not find that recipe. It may have been removed.':errMsg(e))}</p>`;return;
   }
-  S.cur=r;
+  S.cur=r;scaleInit(r);
   const facts=[['Prep',r.prep],['Cook',r.cook],['Total',r.total],['Makes',r.yield]].filter(f=>f[1]);
   app.innerHTML=slim()+`<article class="recipe">
   <header>
     ${r.categories.length?`<p class="eyebrow">${esc(r.categories.join(' · '))}</p>`:''}
     <h1>${esc(r.name)}</h1>
     ${r.description?`<p class="desc">${esc(r.description)}</p>`:''}
-    ${facts.length?`<dl class="facts">${facts.map(f=>`<div><dt>${f[0]}</dt><dd>${esc(f[1])}</dd></div>`).join('')}</dl>`:''}
+    ${facts.length?`<dl class="facts">${facts.map(f=>`<div><dt>${f[0]}</dt><dd${f[0]==='Makes'?' id="fact-yield"':''}>${esc(f[1])}</dd></div>`).join('')}</dl>`:''}
     <div class="toolbar">
+      <button class="btn" data-act="cook">Cook mode</button>
+      <button class="btn soft" data-act="tdlg">Timer</button>
       <a class="btn soft" href="#/edit/${encodeURIComponent(r.slug)}">Edit</a>
       <button class="btn soft" data-act="fav" aria-pressed="${isFav(r)}"><span>${isFav(r)?'Hearted':'Heart it'}</span></button>
       <button class="btn soft" data-act="print">Print</button>
@@ -614,8 +924,8 @@ async function renderRecipe(slug){
   </header>
   ${r.image?`<figure class="hero"><div class="photo">${imgTag(r.image,r.name)}</div></figure>`:''}
   <div class="cols">
-    <section class="ings"><h2>Ingredients</h2>${r.ingredients.length?`<ul>${r.ingredients.map((t,i)=>`<li><label for="ing${i}"><input type="checkbox" id="ing${i}"><span>${esc(t)}</span></label></li>`).join('')}</ul>`:'<p class="note">No ingredients written down yet.</p>'}</section>
-    <section class="steps"><h2>Method</h2>${r.steps.length?`<ol>${r.steps.map(t=>`<li><p>${esc(t)}</p></li>`).join('')}</ol>`:'<p class="note">No steps written down yet.</p>'}</section>
+    <section class="ings"><h2>Ingredients</h2>${S.base>0?`<div class="scaler"><span class="lab">Makes</span><button class="sb" data-act="sdown" aria-label="Make less">&minus;</button><output id="sval">${S.target}</output><button class="sb" data-act="sup" aria-label="Make more">+</button><span id="slab">${esc(S.label)}</span><button class="btn quiet" data-act="sreset">Reset</button></div>`:''}<div id="ing-wrap">${ingListHTML('ing')}</div></section>
+    <section class="steps"><h2>Method</h2>${r.steps.length?`<ol>${r.steps.map(t=>`<li><p>${stepHTML(t)}</p></li>`).join('')}</ol>`:'<p class="note">No steps written down yet.</p>'}</section>
   </div>
   ${r.notes?`<aside class="margin-note"><p class="script">a note in the margin</p><p class="hand">${esc(r.notes)}</p></aside>`:''}
   ${r.source?`<p class="src">Adapted from <a href="${esc(/^https?:\/\//i.test(r.source)?r.source:'#')}" target="_blank" rel="noopener noreferrer">${esc(r.source)}</a></p>`:''}
@@ -663,6 +973,7 @@ async function renderEditor(slug){
 
 /* ---------- router ---------- */
 function route(){
+  if(CK.on)cookClose();
   const p=(location.hash.slice(1)||'/').split('/').filter(Boolean);
   const arg=p[1]?decodeURIComponent(p[1]):'';
   if(p[0]==='recipe'&&arg)return renderRecipe(arg);
@@ -696,6 +1007,24 @@ document.addEventListener('click',async e=>{
     document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);
     toast('Backup saved to your downloads.');return;
   }
+  if(a==='cook')return cookOpen();
+  if(a==='ckexit')return cookClose();
+  if(a==='ckprev')return cookGo(-1);
+  if(a==='cknext')return cookGo(1);
+  if(a==='ckings'){CK.sheet=!CK.sheet;return cookRender()}
+  if(a==='sdown'){if(S.target>1)S.target--;return applyScale()}
+  if(a==='sup'){S.target=Math.min(99,S.target+1);return applyScale()}
+  if(a==='sreset'){S.target=S.base;return applyScale()}
+  if(a==='timer')return tmStart(+b.dataset.sec,b.dataset.label);
+  if(a==='tdlg')return openTimerDialog();
+  if(a==='tpre'){$('#tmin').value=b.dataset.min;return}
+  if(a==='tpause'||a==='tresume'||a==='tstop')return tmAct(a,b.dataset.id);
+  if(a==='dinner')return ndOpen();
+  if(a==='ndagain')return ndBook();
+  if(a==='ndbook'){ND.web=null;return ndBook()}
+  if(a==='ndweb')return ndWeb();
+  if(a==='ndsave')return ndSave().catch(()=>toast('I could not save that recipe.'));
+  if(a==='ndclose'){$('#ndlg').close();return}
   if(a==='gdrive')return connectDrive();
   if(a==='gcfg')return openGSetup();
   if(a==='gsync')return syncNow().then(()=>toast('Synced with Google Drive.')).catch(driveError);
@@ -741,6 +1070,15 @@ document.addEventListener('submit',async e=>{
   }
 });
 
+document.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.id==='ndfav'){ND.fav=t.checked;ndBook();return}
+  if(t.matches&&t.matches('input[data-ing]')){
+    const i=+t.dataset.ing;
+    if(t.checked)S.checked.add(i);else S.checked.delete(i);
+    document.querySelectorAll(`input[data-ing="${i}"]`).forEach(x=>{x.checked=t.checked});
+  }
+});
 document.addEventListener('change',async e=>{
   if(e.target.id!=='restore')return;
   const f=e.target.files[0];e.target.value='';if(!f)return;
@@ -765,6 +1103,7 @@ decorate();
 Book.boot();
 route();
 if(cid()&&canGoogle())loadGIS().catch(()=>{});
+tmLoad();
 })();
 </script>
 </body>
