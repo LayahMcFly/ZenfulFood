@@ -121,6 +121,21 @@ input[type=text],input[type=password],input[type=search],textarea{cursor:text}
 .sgroup h3{margin:0;font-size:22px}
 .sbar{display:flex;gap:6px 10px;flex-wrap:wrap;align-items:center;color:var(--ink-soft);font-size:17px}
 .sbar .btn.quiet{padding:8px 4px}
+.feed{margin-top:44px;display:grid;gap:10px}
+.feed-head{display:flex;gap:6px 14px;align-items:baseline;flex-wrap:wrap}
+.feed-head h2{font-size:30px;margin:0}
+.feed-head .btn.quiet{margin-left:auto}
+.feed .sub{margin:0;color:var(--ink-soft);font-size:17px}
+.feed-row{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x proximity;padding:8px 4px 16px;margin:0 -4px;list-style:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.feed-row li{flex:0 0 190px;scroll-snap-align:start}
+.fcard{display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:inherit;border:0;background:var(--card);padding:8px 8px 12px;border-radius:2px;box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 8px 14px -8px var(--shadow)}
+.fcard:hover{background:#fffaf0}
+.fcard:focus-visible{outline:2px solid var(--rust);outline-offset:3px}
+.fcard .photo{aspect-ratio:4/3}
+.fcard h3{font-size:18px;margin:10px 2px 2px;line-height:1.2}
+.fcard .meta{margin:0 2px;font:400 12px/1.4 var(--label);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
+.feed .skel{height:210px;background:var(--paper-lo);opacity:.55;border-radius:2px}
+.fdetail ul{margin:6px 0 0;padding-left:20px;columns:1}
 .gnote{margin:8px 0 0;font-size:16px;color:var(--ink-soft)}
 .gnote.err{color:#8a2f1f}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
@@ -294,7 +309,7 @@ dialog p{font-size:20px}
 .ck-nav .btn.go{flex:2 1 200px}
 @page{margin:14mm}
 @media print{
-  .frame,.stitch,.toolbar,.slim,.topline,.ver,#toast,dialog,.scaler,#tray,#cook{display:none!important}
+  .frame,.stitch,.toolbar,.slim,.topline,.ver,.feed,#toast,dialog,.scaler,#tray,#cook{display:none!important}
   .dur{border:0;color:inherit}
   html,body{height:auto;min-height:0;background:#fff!important;background-image:none!important;font-size:15px}
   .page{padding:0;max-width:none;margin:0;min-height:0}
@@ -526,7 +541,7 @@ const cleanRecipe=(r,stamp)=>{
 const G={token:'',exp:0,client:null,folderId:'',fileId:'',lastMod:'',lastSync:0,busy:false,again:false,timer:0};
 const cid=()=>store.get('rb_gcid')||'';
 const canGoogle=()=>location.protocol==='https:'||location.hostname==='localhost';
-const VERSION='2.3';
+const VERSION='2.4';
 function driveBar(){
   if(G.token){
     const t=G.busy?'Saving to Google Drive…':G.lastSync?'Saved to Google Drive at '+new Date(G.lastSync).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'Connected to Google Drive';
@@ -985,8 +1000,9 @@ document.addEventListener('touchend',e=>{
 const ND={last:'',fav:false,web:null};
 const mdbKey=()=>(store.get('rb_mdb')||'').trim();
 let NDFROM=false;
-function ndKeyPanel(fromSettings){
-  NDFROM=!!fromSettings;
+let NDFEED=false;
+function ndKeyPanel(fromSettings,feed){
+  NDFROM=!!fromSettings;NDFEED=!!feed;
   const d=$('#ndlg'),body=$('#ndbody');
   body.innerHTML=`<p class="eyebrow">Recipe finder key</p>
   <div class="qs"><h3>Add your own TheMealDB key</h3>
@@ -999,7 +1015,7 @@ function ndKeyPanel(fromSettings){
   <div class="row"><button type="button" class="btn" data-act="ndkeysave">Save</button><button type="button" class="btn soft" data-close="cancel">Cancel</button>${mdbKey()?'<button type="button" class="btn quiet" data-act="ndkeyoff">Remove key</button>':''}</div>`;
   if(!d.open)d.showModal();
 }
-document.addEventListener('close',e=>{if(e.target.id==='ndlg'&&NDFROM){NDFROM=false;setTimeout(()=>{$('#sbar').innerHTML=driveBar();$('#sdlg').showModal()},0)}},true);
+document.addEventListener('close',e=>{if(e.target.id==='ndlg')NDFEED=false;if(e.target.id==='ndlg'&&NDFROM){NDFROM=false;setTimeout(()=>{$('#sbar').innerHTML=driveBar();$('#sdlg').showModal()},0)}},true);
 function ndOpen(){
   const d=$('#ndlg');ND.web=null;ndBook();
   if(!d.open)d.showModal();
@@ -1045,6 +1061,56 @@ async function ndWeb(){
     body.innerHTML=`<p class="err" role="alert">I couldn't get a recipe from TheMealDB. Check your connection and your key in Settings, then try again.</p><div class="row"><button type="button" class="btn soft" data-act="ndbook">Back to my book</button><button type="button" class="btn quiet" data-act="ndclose">Close</button></div>`;
   }
 }
+/* ---------- Online feed (TheMealDB, side scroll) ---------- */
+const FEED={items:[],busy:false,failed:false,tok:0};
+function feedShell(inner,withShuffle){
+  const el=$('#feed');if(!el)return;
+  el.innerHTML=`<div class="feed-head"><h2 id="feedh">Online feed</h2>${withShuffle?'<button type="button" class="btn quiet" data-act="feedshuffle">Shuffle</button>':''}</div><p class="sub">Random recipes from TheMealDB. Needs the internet. The rest of your book works offline.</p>${inner}`;
+}
+function feedPaint(){
+  if(!$('#feed'))return;
+  if(!mdbKey()){
+    feedShell('<div><button type="button" class="btn soft" data-act="feedkey">Add your TheMealDB key</button></div>',false);return;
+  }
+  if(FEED.busy){feedShell('<ul class="feed-row" aria-hidden="true">'+'<li><div class="skel"></div></li>'.repeat(5)+'</ul>',false);return}
+  if(!FEED.items.length){
+    feedShell(`<p class="note">${navigator.onLine===false?'You are offline right now, so the feed is resting.':'I could not load the feed. Check your connection and your key in Settings.'}</p><div><button type="button" class="btn soft" data-act="feedshuffle">Try again</button></div>`,false);return;
+  }
+  feedShell('<ul class="feed-row" tabindex="0" aria-label="Random recipes, scroll sideways">'+FEED.items.map((m,i)=>`<li><button type="button" class="fcard" data-act="feedopen" data-i="${i}"><div class="photo">${imgTag(m.thumb,m.name)}</div><h3>${esc(m.name)}</h3><p class="meta">${esc([m.tags[0],m.categories[0]].filter(Boolean).join(' · '))}</p></button></li>`).join('')+'</ul>',true);
+}
+async function feedLoad(){
+  if(!mdbKey()){feedPaint();return}
+  if(FEED.busy)return;
+  if(navigator.onLine===false){FEED.items=[];feedPaint();return}
+  FEED.busy=true;const tok=++FEED.tok;feedPaint();
+  const one=async()=>{
+    const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),10000);
+    try{
+      const r=await fetch(`https://www.themealdb.com/api/json/v1/${encodeURIComponent(mdbKey())}/random.php`,{signal:ctl.signal,cache:'no-store'});
+      if(!r.ok)throw new Error('x');
+      const j=await r.json();if(!j.meals||!j.meals[0])throw new Error('x');
+      return mealToRecipe(j.meals[0]);
+    }finally{clearTimeout(to)}
+  };
+  const res=await Promise.allSettled(Array.from({length:10},one));
+  if(tok!==FEED.tok)return;
+  const seen=new Set();
+  FEED.items=res.filter(x=>x.status==='fulfilled').map(x=>x.value).filter(m=>m.id&&!seen.has(m.id)&&seen.add(m.id));
+  FEED.busy=false;feedPaint();
+}
+function feedInit(force){
+  if(!$('#feed'))return;
+  if(force||(!FEED.items.length&&!FEED.busy))feedLoad();else feedPaint();
+}
+function feedOpen(i){
+  const m=FEED.items[i];if(!m)return;
+  ND.web=m;NDFROM=false;
+  $('#ndbody').innerHTML=`<p class="eyebrow">Online feed</p><div class="photo">${imgTag(m.thumb,m.name)}</div><h3>${esc(m.name)}</h3><p class="meta">${esc([m.tags[0],m.categories[0],m.ingredients.length+' ingredients'].filter(Boolean).join(' · '))}</p>
+  <div class="fdetail"><ul>${m.ingredients.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
+  <p class="hint">This one is not in your book yet. Save it to keep it, and to use cook mode, timers and the serving scaler.</p>
+  <div class="row"><button type="button" class="btn" data-act="ndsave">Save to my book</button><button type="button" class="btn soft" data-close="cancel">Close</button></div>`;
+  $('#ndlg').showModal();
+}
 async function ndSave(){
   const m=ND.web;if(!m)return;
   const ex=S.demo.find(r=>r.name.toLowerCase()===m.name.toLowerCase());
@@ -1074,7 +1140,8 @@ async function renderHome(){
   </div>
   <div class="chips" id="chips"></div>
   <ul class="grid" id="grid"></ul>
-  <div id="more"></div>`;
+  <div id="more"></div>
+  <section class="feed" id="feed" aria-labelledby="feedh"></section>`;
   window.scrollTo(0,0);
   API().categories().then(cs=>{
     S.cats=cs;
@@ -1084,6 +1151,7 @@ async function renderHome(){
   let t;
   $('#q').addEventListener('input',e=>{clearTimeout(t);t=setTimeout(()=>{S.query=e.target.value.trim();loadGrid(false)},350)});
   loadGrid(false);
+  feedInit(false);
 }
 const metaLine=r=>[r.total,r.yield,(!r.total&&!r.yield)?r.categories[0]:''].filter(Boolean).join(' · ');
 const card=r=>`<li><a class="card" href="#/recipe/${encodeURIComponent(r.slug)}"><div class="photo">${imgTag(r.image,'')}</div><h3>${esc(r.name)}${isFav(r)?HEART:''}</h3><p class="meta">${esc(metaLine(r))}</p></a></li>`;
@@ -1243,8 +1311,11 @@ document.addEventListener('click',async e=>{
   if(a==='ndagain')return ndBook();
   if(a==='ndbook'){ND.web=null;return ndBook()}
   if(a==='ndweb')return ndWeb();
-  if(a==='ndkeysave'){const k=$('#ndkey').value.trim();if(!k){toast('Paste your key first.');return}store.set('rb_mdb',k);toast('Key saved on this device.');if(NDFROM){$('#ndlg').close();return}return ndWeb()}
-  if(a==='ndkeyoff'){store.del('rb_mdb');toast('Key removed.');if(NDFROM)$('#ndlg').close();else ndBook();return}
+  if(a==='feedshuffle')return feedInit(true);
+  if(a==='feedkey')return ndKeyPanel(false,true);
+  if(a==='feedopen')return feedOpen(+b.dataset.i);
+  if(a==='ndkeysave'){const k=$('#ndkey').value.trim();if(!k){toast('Paste your key first.');return}store.set('rb_mdb',k);FEED.items=[];toast('Key saved on this device.');if(NDFEED){NDFEED=false;$('#ndlg').close();feedInit(true);return}if(NDFROM){$('#ndlg').close();return}return ndWeb()}
+  if(a==='ndkeyoff'){store.del('rb_mdb');FEED.items=[];toast('Key removed.');if(NDFROM)$('#ndlg').close();else ndBook();return}
   if(a==='mdbset'){$('#sdlg').close();return ndKeyPanel(true)}
   if(a==='ndsave')return ndSave().catch(()=>toast('I could not save that recipe.'));
   if(a==='ndclose'){$('#ndlg').close();return}
