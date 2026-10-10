@@ -338,6 +338,7 @@ dialog p{font-size:20px}
   <section class="sgroup"><h3>Saving</h3><div class="sbar" id="sbar"></div></section>
   <section class="sgroup"><h3>Backup</h3><p class="hint">A backup is a file with all your recipes and photos. Keep one somewhere safe.</p><div class="row"><button type="button" class="btn soft" data-act="backup">Save a backup</button><button type="button" class="btn soft" data-act="restore">Restore a backup</button></div><input type="file" id="restore" accept=".json,application/json" hidden></section>
   <section class="sgroup"><h3>Method writer</h3><p class="hint">Lets an AI write the method from your ingredients. Choose a service and add your key.</p><div class="row"><button type="button" class="btn soft" data-act="groqset">Method writer settings</button></div></section>
+  <section class="sgroup"><h3>Recipe finder</h3><p class="hint">"Try something new" in What's for dinner? pulls a random recipe from TheMealDB. It needs your own key.</p><div class="row"><button type="button" class="btn soft" data-act="mdbset">Recipe finder key</button></div></section>
   <p class="hint" id="sver"></p>
   <div class="row"><button type="button" class="btn" data-close="close">Done</button></div>
 </form></dialog>
@@ -345,6 +346,7 @@ dialog p{font-size:20px}
 <dialog id="gdlg"><form method="dialog">
   <h2 style="font-size:26px">Save to Google Drive</h2>
   <p class="hint" id="gnote"></p>
+  <div class="qs" id="gsteps" aria-live="polite"></div>
   <div class="field"><label for="gcid">Google client ID</label><input id="gcid" type="text" autocapitalize="off" spellcheck="false" placeholder="1234567890-abc.apps.googleusercontent.com"></div>
   <p class="hint">Your recipes go in a folder called "Family Recipe Book" in your Drive. This page can only see that folder, nothing else.</p>
   <div class="row"><button class="btn" value="go">Save and connect</button><button type="button" class="btn soft" data-close="cancel">Cancel</button></div>
@@ -387,7 +389,6 @@ const uuid=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'xxxxxxxx-
 const slugify=s=>String(s).toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g,'').trim().replace(/[\s_-]+/g,'-')||'recipe';
 const app=$('#app');
 /* Optional: paste your Google client ID between the quotes so every device works without typing it in. */
-const GOOGLE_CLIENT_ID='';
 const S={mode:null,base:'',token:'',user:null,favs:new Set(),cats:[],org:{categories:null,tags:null},query:'',cat:'',onlyFavs:false,page:1,totalPages:1,demo:[],deleted:{},cur:null,checked:new Set(),f:1,base:0,target:0,label:''};
 const API=()=>Book;
 const isFav=r=>!!r.fav;
@@ -523,9 +524,9 @@ const cleanRecipe=(r,stamp)=>{
 
 /* ---------- Google Drive (optional cloud save) ---------- */
 const G={token:'',exp:0,client:null,folderId:'',fileId:'',lastMod:'',lastSync:0,busy:false,again:false,timer:0};
-const cid=()=>store.get('rb_gcid')||GOOGLE_CLIENT_ID;
+const cid=()=>store.get('rb_gcid')||'';
 const canGoogle=()=>location.protocol==='https:'||location.hostname==='localhost';
-const VERSION='2.1';
+const VERSION='2.3';
 function driveBar(){
   if(G.token){
     const t=G.busy?'Saving to Google Drive…':G.lastSync?'Saved to Google Drive at '+new Date(G.lastSync).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'Connected to Google Drive';
@@ -646,7 +647,7 @@ function disconnectDrive(){
 function openGSetup(){
   const d=$('#gdlg');
   $('#gnote').textContent=canGoogle()?'Paste the client ID from your Google Cloud project. You only need to do this once on this device.':'Google sign-in only works once this page is published at a web address, such as GitHub Pages. Open the published page to connect.';
-  $('#gcid').value=cid();
+  $('#gcid').value=cid();GS.i=0;gRender();
   d.addEventListener('close',()=>{
     const v=$('#gcid').value.trim();
     if(d.returnValue==='go'&&v){store.set('rb_gcid',v);G.client=null;connectDrive()}
@@ -687,11 +688,28 @@ const QSTEPS={
   ]
 };
 const QS={i:0};
-function qRender(){
-  const k=Object.keys(PROV).find(x=>x===$('#qprov').value)||'gemini',L=QSTEPS[k],i=Math.min(QS.i,L.length-1),st=L[i],el=$('#qsteps');
-  el.innerHTML=`<p class="eyebrow">How to get your key · Step ${i+1} of ${L.length}</p><h3>${esc(st[0])}</h3><p>${esc(st[1])}</p>${st[2]?`<a class="btn soft go" href="${esc(st[2].href)}" target="_blank" rel="noopener noreferrer">${esc(st[2].label)}</a>`:''}
-  <div class="nav"><button type="button" class="btn soft" data-act="qstep" data-d="-1"${i===0?' disabled':''}>Back</button><button type="button" class="btn" data-act="qstep" data-d="1"${i===L.length-1?' disabled':''}>Next</button><span class="dots" aria-hidden="true">${L.map((_,j)=>`<i class="${j===i?'on':''}"></i>`).join('')}</span></div>`;
+function stepBox(title,L,i,act){
+  const st=L[i];
+  return `<p class="eyebrow">${esc(title)} · Step ${i+1} of ${L.length}</p><h3>${esc(st[0])}</h3><p>${esc(st[1])}</p>${st[2]?`<a class="btn soft go" href="${esc(st[2].href)}" target="_blank" rel="noopener noreferrer">${esc(st[2].label)}</a>`:''}
+  <div class="nav"><button type="button" class="btn soft" data-act="${act}" data-d="-1"${i===0?' disabled':''}>Back</button><button type="button" class="btn" data-act="${act}" data-d="1"${i===L.length-1?' disabled':''}>Next</button><span class="dots" aria-hidden="true">${L.map((_,j)=>`<i class="${j===i?'on':''}"></i>`).join('')}</span></div>`;
 }
+function qRender(){
+  const k=Object.keys(PROV).find(x=>x===$('#qprov').value)||'gemini',L=QSTEPS[k];
+  QS.i=Math.min(QS.i,L.length-1);$('#qsteps').innerHTML=stepBox('How to get your key',L,QS.i,'qstep');
+}
+const GS={i:0};
+function gSteps(){
+  const o=location.origin&&location.origin!=='null'?location.origin:'the web address of this page';
+  return [
+    ['Open Google Cloud','Sign in with the Google account you want your recipes saved in. Accept the terms if it asks. Then create a new project and name it "Recipe book".',{href:'https://console.cloud.google.com/projectcreate',label:'Open Google Cloud'}],
+    ['Turn on Google Drive','Search for "Google Drive API" in the search bar at the top, open it, and tap Enable.',{href:'https://console.cloud.google.com/apis/library/drive.googleapis.com',label:'Open the Drive API page'}],
+    ['Set up the consent screen','Open "Google Auth Platform" (or "OAuth consent screen"). Name the app "Recipe book", add your email, and choose External. Under Audience, add your own email as a Test user. Without this, Google blocks your sign-in.',{href:'https://console.cloud.google.com/auth/overview',label:'Open Google Auth Platform'}],
+    ['Create the client','Go to Clients, then Create client. Choose "Web application". Under "Authorized JavaScript origins" add exactly this address, with nothing after it: '+o,{href:'https://console.cloud.google.com/auth/clients',label:'Open Clients'}],
+    ['Copy the client ID','After creating it, copy the Client ID. It ends in .apps.googleusercontent.com. You do not need the client secret.'],
+    ['Paste it below','Paste the client ID into the box below and tap Save and connect. If Google says access is blocked, wait a few minutes and try again.']
+  ];
+}
+function gRender(){const L=gSteps();GS.i=Math.min(GS.i,L.length-1);$('#gsteps').innerHTML=stepBox('How to connect Google Drive',L,GS.i,'gstep')}
 function gqFill(){
   QS.i=0;
   const p=PROV[$('#qprov').value]||PROV.openrouter;
@@ -964,8 +982,24 @@ document.addEventListener('touchend',e=>{
 },{passive:true});
 
 /* ---------- What's for dinner? ---------- */
-const MEALDB_KEY='1'; /* TheMealDB's free test key. See themealdb.com/api.php if you want to publish widely. */
 const ND={last:'',fav:false,web:null};
+const mdbKey=()=>(store.get('rb_mdb')||'').trim();
+let NDFROM=false;
+function ndKeyPanel(fromSettings){
+  NDFROM=!!fromSettings;
+  const d=$('#ndlg'),body=$('#ndbody');
+  body.innerHTML=`<p class="eyebrow">Recipe finder key</p>
+  <div class="qs"><h3>Add your own TheMealDB key</h3>
+  <p>1. Open the TheMealDB page below. It lists the key you can use.</p>
+  <a class="btn soft go" href="https://www.themealdb.com/api.php" target="_blank" rel="noopener noreferrer">Open themealdb.com/api.php</a>
+  <p>2. Copy the key. Their page offers a free test key for personal use, and a private key for their supporters.</p>
+  <p>3. Paste it here and tap Save.</p></div>
+  <div class="field"><label for="ndkey">TheMealDB key</label><input id="ndkey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(mdbKey())}"></div>
+  <p class="hint">Your key stays in this browser only. It is not saved in this web page, Google Drive or backups.</p>
+  <div class="row"><button type="button" class="btn" data-act="ndkeysave">Save</button><button type="button" class="btn soft" data-close="cancel">Cancel</button>${mdbKey()?'<button type="button" class="btn quiet" data-act="ndkeyoff">Remove key</button>':''}</div>`;
+  if(!d.open)d.showModal();
+}
+document.addEventListener('close',e=>{if(e.target.id==='ndlg'&&NDFROM){NDFROM=false;setTimeout(()=>{$('#sbar').innerHTML=driveBar();$('#sdlg').showModal()},0)}},true);
 function ndOpen(){
   const d=$('#ndlg');ND.web=null;ndBook();
   if(!d.open)d.showModal();
@@ -993,11 +1027,12 @@ function mealToRecipe(m){
     categories:m.strCategory?[m.strCategory]:[],tags,ingredients:ing,steps,source:'https://www.themealdb.com/meal/'+m.idMeal};
 }
 async function ndWeb(){
+  if(!mdbKey())return ndKeyPanel(false);
   const body=$('#ndbody');
   body.innerHTML='<p class="note">Looking through someone else\'s cookbook…</p>';
   try{
     const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),10000);
-    const res=await fetch(`https://www.themealdb.com/api/json/v1/${MEALDB_KEY}/random.php`,{signal:ctl.signal});
+    const res=await fetch(`https://www.themealdb.com/api/json/v1/${encodeURIComponent(mdbKey())}/random.php`,{signal:ctl.signal});
     clearTimeout(to);
     if(!res.ok)throw new Error('x');
     const j=await res.json();
@@ -1007,7 +1042,7 @@ async function ndWeb(){
     <p class="hint">This one is not in your book yet.</p>
     <div class="row"><button type="button" class="btn" data-act="ndsave">Save to my book</button><button type="button" class="btn soft" data-act="ndweb">Another one</button><button type="button" class="btn soft" data-act="ndbook">Back to my book</button></div>`;
   }catch(e){console.warn('mealdb',e);
-    body.innerHTML=`<p class="err" role="alert">I couldn't reach TheMealDB right now. Check your connection and try again.</p><div class="row"><button type="button" class="btn soft" data-act="ndbook">Back to my book</button><button type="button" class="btn quiet" data-act="ndclose">Close</button></div>`;
+    body.innerHTML=`<p class="err" role="alert">I couldn't get a recipe from TheMealDB. Check your connection and your key in Settings, then try again.</p><div class="row"><button type="button" class="btn soft" data-act="ndbook">Back to my book</button><button type="button" class="btn quiet" data-act="ndclose">Close</button></div>`;
   }
 }
 async function ndSave(){
@@ -1178,6 +1213,7 @@ document.addEventListener('click',async e=>{
   if(chip){S.cat=chip.dataset.cat;document.querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',c===chip));loadGrid(false);return}
   const b=e.target.closest('[data-act]');if(!b)return;
   const a=b.dataset.act;
+  if(a==='gstep'){GS.i=Math.max(0,GS.i+(+b.dataset.d));gRender();return}
   if(a==='qstep'){QS.i=Math.max(0,QS.i+(+b.dataset.d));qRender();return}
   if(a==='settings'){$('#sbar').innerHTML=driveBar();$('#sver').textContent='The Family Recipe Book, version '+VERSION;$('#sdlg').showModal();return}
   if(['gdrive','gcfg','groqset'].includes(a)&&b.closest('#sdlg'))$('#sdlg').close();
@@ -1207,6 +1243,9 @@ document.addEventListener('click',async e=>{
   if(a==='ndagain')return ndBook();
   if(a==='ndbook'){ND.web=null;return ndBook()}
   if(a==='ndweb')return ndWeb();
+  if(a==='ndkeysave'){const k=$('#ndkey').value.trim();if(!k){toast('Paste your key first.');return}store.set('rb_mdb',k);toast('Key saved on this device.');if(NDFROM){$('#ndlg').close();return}return ndWeb()}
+  if(a==='ndkeyoff'){store.del('rb_mdb');toast('Key removed.');if(NDFROM)$('#ndlg').close();else ndBook();return}
+  if(a==='mdbset'){$('#sdlg').close();return ndKeyPanel(true)}
   if(a==='ndsave')return ndSave().catch(()=>toast('I could not save that recipe.'));
   if(a==='ndclose'){$('#ndlg').close();return}
   if(a==='gdrive')return connectDrive();
