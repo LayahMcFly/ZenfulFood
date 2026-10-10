@@ -102,6 +102,16 @@ input[type=text],input[type=password],input[type=search],textarea{cursor:text}
 .btn.groq:hover{background:#ecd5a8}
 .btn.groq[disabled]{opacity:.7;cursor:progress}
 .methodtools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.qs{border:1px dashed var(--caramel);border-radius:4px;background:var(--card);padding:14px 16px;display:grid;gap:8px}
+.qs .eyebrow{margin:0}
+.qs h3{font-size:22px;margin:0}
+.qs p{margin:0;font-size:17px;line-height:1.45}
+.qs .go{justify-self:start;text-decoration:none}
+.qs .nav{display:flex;gap:8px;align-items:center;margin-top:4px}
+.qs .nav .btn{padding:10px 14px;min-height:40px}
+.qs .dots{display:flex;gap:6px;margin-left:auto}
+.qs .dots i{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.qs .dots i.on{background:var(--rust)}
 .gnote{margin:8px 0 0;font-size:16px;color:var(--ink-soft)}
 .gnote.err{color:#8a2f1f}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
@@ -324,6 +334,7 @@ dialog p{font-size:20px}
 <dialog id="qdlg"><form method="dialog">
   <h2 style="font-size:26px">Method writer settings</h2>
   <div class="field"><label for="qprov">Which service</label><select id="qprov"><option value="gemini">Google Gemini (free tier)</option><option value="openrouter">OpenRouter (free models)</option><option value="groq">Groq</option></select></div>
+  <div class="qs" id="qsteps" aria-live="polite"></div>
   <p class="hint" id="qhelp"></p>
   <div class="field"><label for="qkey">API key</label><input id="qkey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIza…"></div>
   <div class="field"><label for="qmodel">Model (leave empty for the default)</label><input id="qmodel" type="text" autocapitalize="off" spellcheck="false"></div>
@@ -634,10 +645,41 @@ const PROV={
 const gqProv=()=>PROV[store.get('rb_prov')]||(store.get('rb_groq')&&!store.get('rb_gmkey')?PROV.groq:store.get('rb_orkey')&&!store.get('rb_gmkey')?PROV.openrouter:PROV.gemini);
 const gqKey=()=>(store.get(gqProv().keyk)||'').trim(),gqModel=()=>(store.get(gqProv().modk)||'').trim()||gqProv().model;
 function gqLabel(){const b=$('#groqgo');if(b)b.lastChild.textContent=gqProv()===PROV.groq?'Let Groq create the method':'Let AI create the method'}
+const QSTEPS={
+  gemini:[
+    ['Open Google AI Studio','Sign in with your Google account when it asks. Accept the terms if they show up.',{href:'https://aistudio.google.com/apikey',label:'Open aistudio.google.com/apikey'}],
+    ['Tap Create API key','If it asks for a project, choose "Create API key in new project". Pick any name.'],
+    ['Skip billing','Do not set up billing or link a payment method. The free tier works without one, so nothing can be charged.'],
+    ['Copy the key','Tap the copy icon next to your new key. It starts with AIza.'],
+    ['Paste it below','Come back to this page, paste the key into the box below, then tap Save.']
+  ],
+  openrouter:[
+    ['Make a free account','Sign up with Google or your email.',{href:'https://openrouter.ai/',label:'Open openrouter.ai'}],
+    ['Go to the keys page','Open your account menu and choose Keys, or use the button.',{href:'https://openrouter.ai/keys',label:'Open openrouter.ai/keys'}],
+    ['Tap Create key','Name it "Recipe book". Leave any spending limit empty and do not add credits. Free models need none.'],
+    ['Copy the key right away','OpenRouter shows it only once. It starts with sk-or-.'],
+    ['Paste it below','Paste the key into the box below, then tap Save. You get about 50 free requests a day.']
+  ],
+  groq:[
+    ['Make a Groq account','Sign up with Google or your email.',{href:'https://console.groq.com/',label:'Open console.groq.com'}],
+    ['Stay on the Free plan','In Settings, then Billing, check that you are on Free. The paid Developer plan is where charges come from.'],
+    ['Open the keys page','Use the button, then tap Create API Key.',{href:'https://console.groq.com/keys',label:'Open console.groq.com/keys'}],
+    ['Name it and copy it','Groq shows the key only once. It starts with gsk_.'],
+    ['Paste it below','Paste the key into the box below, then tap Save.']
+  ]
+};
+const QS={i:0};
+function qRender(){
+  const k=Object.keys(PROV).find(x=>x===$('#qprov').value)||'gemini',L=QSTEPS[k],i=Math.min(QS.i,L.length-1),st=L[i],el=$('#qsteps');
+  el.innerHTML=`<p class="eyebrow">How to get your key · Step ${i+1} of ${L.length}</p><h3>${esc(st[0])}</h3><p>${esc(st[1])}</p>${st[2]?`<a class="btn soft go" href="${esc(st[2].href)}" target="_blank" rel="noopener noreferrer">${esc(st[2].label)}</a>`:''}
+  <div class="nav"><button type="button" class="btn soft" data-act="qstep" data-d="-1"${i===0?' disabled':''}>Back</button><button type="button" class="btn" data-act="qstep" data-d="1"${i===L.length-1?' disabled':''}>Next</button><span class="dots" aria-hidden="true">${L.map((_,j)=>`<i class="${j===i?'on':''}"></i>`).join('')}</span></div>`;
+}
 function gqFill(){
+  QS.i=0;
   const p=PROV[$('#qprov').value]||PROV.openrouter;
   $('#qkey').value=(store.get(p.keyk)||'');$('#qmodel').value=store.get(p.modk)||'';$('#qmodel').placeholder=p.model;
-  $('#qhelp').textContent='Get a key at '+p.where+'. It stays in this browser only. It is not saved to Google Drive, backups or this web page, so do not use it on a shared computer.';
+  $('#qhelp').textContent='Your key stays in this browser only. It is not saved to Google Drive, backups or this web page, so do not use it on a shared computer.';
+  qRender();
   $('#qmhelp').textContent='If '+p.name+' says the model is gone, paste a newer name from '+p.models+'.';
 }
 function openGroqSettings(after){
@@ -1113,6 +1155,7 @@ document.addEventListener('click',async e=>{
   if(chip){S.cat=chip.dataset.cat;document.querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',c===chip));loadGrid(false);return}
   const b=e.target.closest('[data-act]');if(!b)return;
   const a=b.dataset.act;
+  if(a==='qstep'){QS.i=Math.max(0,QS.i+(+b.dataset.d));qRender();return}
   if(a==='groq')return groqMethod();
   if(a==='groqset')return openGroqSettings();
   if(a==='restore')return $('#restore').click();
@@ -1150,7 +1193,7 @@ document.addEventListener('click',async e=>{
   if(a==='print')return window.print();
   if(a==='fav'){
     const r=S.cur;
-    try{await API().fav(r,!isFav(r));b.setAttribute('aria-pressed',isFav(r));b.firstElementChild.textContent=isFav(r)?'Hearted':'Heart it'}
+    try{await API().fav(r,!isFav(r));b.setAttribute('aria-pressed',isFav(r));b.querySelector('span').textContent=isFav(r)?'Hearted':'Heart it'}
     catch(err){if(err.message!=='AUTH')toast(errMsg(err))}
     return;
   }
