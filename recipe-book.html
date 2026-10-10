@@ -322,11 +322,12 @@ dialog p{font-size:20px}
   <div class="row"><button class="btn" value="go">Save and connect</button><button class="btn soft" value="cancel">Cancel</button></div>
 </form></dialog>
 <dialog id="qdlg"><form method="dialog">
-  <h2 style="font-size:26px">Groq settings</h2>
-  <p class="hint">Groq reads your ingredient list and writes the method for you. Get a key at console.groq.com/keys. It stays in this browser only. It is not saved to Google Drive, backups or this web page, so do not use it on a shared computer.</p>
-  <div class="field"><label for="qkey">Groq API key</label><input id="qkey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="gsk_…"></div>
-  <div class="field"><label for="qmodel">Model</label><input id="qmodel" type="text" autocapitalize="off" spellcheck="false" placeholder="llama-3.3-70b-versatile"></div>
-  <p class="hint">If Groq ever says the model is gone, paste a newer name from console.groq.com/docs/models.</p>
+  <h2 style="font-size:26px">Method writer settings</h2>
+  <div class="field"><label for="qprov">Which service</label><select id="qprov"><option value="gemini">Google Gemini (free tier)</option><option value="openrouter">OpenRouter (free models)</option><option value="groq">Groq</option></select></div>
+  <p class="hint" id="qhelp"></p>
+  <div class="field"><label for="qkey">API key</label><input id="qkey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIza…"></div>
+  <div class="field"><label for="qmodel">Model (leave empty for the default)</label><input id="qmodel" type="text" autocapitalize="off" spellcheck="false"></div>
+  <p class="hint" id="qmhelp"></p>
   <div class="row"><button class="btn" value="go">Save</button><button class="btn soft" value="cancel">Cancel</button><button class="btn quiet" value="forget">Remove key</button></div>
 </form></dialog>
 <div id="tray" aria-live="polite"></div>
@@ -625,18 +626,32 @@ function openGSetup(){
 }
 
 /* ---------- Groq: write the method ---------- */
-const GROQ_URL='https://api.groq.com/openai/v1/chat/completions',GROQ_MODEL='llama-3.3-70b-versatile';
-const gqKey=()=>(store.get('rb_groq')||'').trim(),gqModel=()=>(store.get('rb_gmodel')||'').trim()||GROQ_MODEL;
+const PROV={
+  gemini:{name:'Gemini',url:'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',model:'gemini-flash-latest',keyk:'rb_gmkey',modk:'rb_gmmodel',json:false,where:'aistudio.google.com/apikey',models:'ai.google.dev/gemini-api/docs/models'},
+  groq:{name:'Groq',url:'https://api.groq.com/openai/v1/chat/completions',model:'llama-3.3-70b-versatile',keyk:'rb_groq',modk:'rb_gmodel',json:true,where:'console.groq.com/keys',models:'console.groq.com/docs/models'},
+  openrouter:{name:'OpenRouter',url:'https://openrouter.ai/api/v1/chat/completions',model:'openrouter/free',keyk:'rb_orkey',modk:'rb_ormodel',json:false,where:'openrouter.ai/keys',models:'openrouter.ai/models?max_price=0'}
+};
+const gqProv=()=>PROV[store.get('rb_prov')]||(store.get('rb_groq')&&!store.get('rb_gmkey')?PROV.groq:store.get('rb_orkey')&&!store.get('rb_gmkey')?PROV.openrouter:PROV.gemini);
+const gqKey=()=>(store.get(gqProv().keyk)||'').trim(),gqModel=()=>(store.get(gqProv().modk)||'').trim()||gqProv().model;
+function gqLabel(){const b=$('#groqgo');if(b)b.lastChild.textContent=gqProv()===PROV.groq?'Let Groq create the method':'Let AI create the method'}
+function gqFill(){
+  const p=PROV[$('#qprov').value]||PROV.openrouter;
+  $('#qkey').value=(store.get(p.keyk)||'');$('#qmodel').value=store.get(p.modk)||'';$('#qmodel').placeholder=p.model;
+  $('#qhelp').textContent='Get a key at '+p.where+'. It stays in this browser only. It is not saved to Google Drive, backups or this web page, so do not use it on a shared computer.';
+  $('#qmhelp').textContent='If '+p.name+' says the model is gone, paste a newer name from '+p.models+'.';
+}
 function openGroqSettings(after){
-  const d=$('#qdlg');$('#qkey').value=gqKey();$('#qmodel').value=store.get('rb_gmodel')||'';d.returnValue='';
+  const d=$('#qdlg');$('#qprov').value=Object.keys(PROV).find(k=>PROV[k]===gqProv());gqFill();d.returnValue='';
+  $('#qprov').onchange=gqFill;
   d.addEventListener('close',()=>{
     if(d.returnValue==='go'){
-      const k=$('#qkey').value.trim(),m=$('#qmodel').value.trim();
-      if(k)store.set('rb_groq',k);else store.del('rb_groq');
-      if(m)store.set('rb_gmodel',m);else store.del('rb_gmodel');
-      toast(k?'Groq key saved on this device.':'Groq key removed.');
+      const p=PROV[$('#qprov').value],k=$('#qkey').value.trim(),m=$('#qmodel').value.trim();
+      store.set('rb_prov',$('#qprov').value);
+      if(k)store.set(p.keyk,k);else store.del(p.keyk);
+      if(m)store.set(p.modk,m);else store.del(p.modk);
+      gqLabel();toast(k?p.name+' key saved on this device.':p.name+' key removed.');
       if(k&&after)after();
-    }else if(d.returnValue==='forget'){store.del('rb_groq');toast('Groq key removed.')}
+    }else if(d.returnValue==='forget'){store.del(PROV[$('#qprov').value].keyk);toast('Key removed.')}
   },{once:true});
   d.showModal();
 }
@@ -653,37 +668,42 @@ Rules:
 async function groqMethod(){
   const g=id=>($(id)?.value||'').trim();
   const ing=lines(g('#f-ing'),true);
-  if(!ing.length){gqNote('Add your ingredients first, one per line. Groq builds the method from them.',true);$('#f-ing').focus();return}
+  if(!ing.length){gqNote('Add your ingredients first, one per line. The method is built from them.',true);$('#f-ing').focus();return}
   if(!gqKey()){openGroqSettings(groqMethod);return}
-  if(g('#f-steps')&&!await confirmBox('Replace the method you already wrote with one from Groq?','Replace it','Keep mine'))return;
-  const btn=$('#groqgo'),label=btn.innerHTML;btn.disabled=true;btn.lastChild.textContent='Groq is writing…';gqNote('');
+  if(g('#f-steps')&&!await confirmBox('Replace the method you already wrote with a new one?','Replace it','Keep mine'))return;
+  const btn=$('#groqgo'),label=btn.innerHTML;btn.disabled=true;btn.lastChild.textContent=gqProv().name+' is writing…';gqNote('');
   const info=[['Recipe',g('#f-name')],['About',g('#f-desc')],['Makes',g('#f-yield')],['Prep time',g('#f-prep')],['Cook time',g('#f-cook')],['Total time',g('#f-total')]].filter(x=>x[1]).map(x=>x[0]+': '+x[1]).join('\n');
   try{
     const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),45000);
-    const res=await fetch(GROQ_URL,{method:'POST',signal:ctl.signal,headers:{'Content-Type':'application/json','Authorization':'Bearer '+gqKey()},
-      body:JSON.stringify({model:gqModel(),temperature:.3,response_format:{type:'json_object'},messages:[{role:'system',content:GQ_SYSTEM},{role:'user',content:(info?info+'\n':'')+'Ingredients:\n'+ing.map(x=>'- '+x).join('\n')}]})});
+    const P=gqProv(),req={model:gqModel(),temperature:.3,messages:[{role:'system',content:GQ_SYSTEM},{role:'user',content:(info?info+'\n':'')+'Ingredients:\n'+ing.map(x=>'- '+x).join('\n')}]};
+    if(P.json)req.response_format={type:'json_object'};
+    const res=await fetch(P.url,{method:'POST',signal:ctl.signal,headers:{'Content-Type':'application/json','Authorization':'Bearer '+gqKey()},body:JSON.stringify(req)});
     clearTimeout(to);
     if(!res.ok){
       let m='';try{m=(await res.json()).error?.message||''}catch{}
       const e=new Error(m);e.status=res.status;throw e;
     }
     const j=await res.json();
-    let out=JSON.parse(j.choices[0].message.content);
+    let raw=String(j.choices[0].message.content||'').replace(/<think>[\s\S]*?<\/think>/g,'');
+    const m1=raw.match(/\{[\s\S]*\}|\[[\s\S]*\]/);if(!m1)throw new Error('shape');
+    let out=JSON.parse(m1[0]);
     let st=(Array.isArray(out)?out:out.steps);
     if(!Array.isArray(st))throw new Error('shape');
     st=st.map(x=>String(x&&x.text||x).trim().replace(/^(step\s*\d+\s*[:.)-]?\s*|\d+[.)]\s+)/i,'')).filter(Boolean);
     if(!st.length)throw new Error('shape');
     $('#f-steps').value=st.join('\n\n');
-    gqNote('Groq wrote '+st.length+' steps. Read them over and fix anything that does not match how you make it, then save.');
+    gqNote(P.name+' wrote '+st.length+' steps. Read them over and fix anything that does not match how you make it, then save.');
   }catch(e){
-    const c=e.status;
-    gqNote(c===401?'Groq did not accept that key. Open Groq settings and paste it again.'
-      :c===429?'Groq says you have used up the free limit for now. Wait a minute and try again.'
-      :c===404||/model/i.test(e.message||'')&&c?'Groq could not find the model "'+gqModel()+'". Open Groq settings and choose a current one.'
-      :c?'Groq sent back an error: '+(e.message||c)
-      :e.name==='AbortError'?'Groq took too long. Try again.'
-      :e.message==='shape'||e instanceof SyntaxError?'Groq answered in a shape I could not read. Try again.'
-      :'I could not reach Groq. Check your connection and try again.',true);
+    const c=e.status,N=gqProv().name;
+    gqNote(c===401?N+' did not accept that key. Open settings and paste it again.'
+      :c===402?N+' says the account balance is below zero. Open your '+N+' account to fix it.'
+      :c===403?N+' refused that key. Check that it is a '+N+' key and that the Generative Language API is allowed for it.'
+      :c===429?N+' says you have used up the free limit for now. Try again in a minute, or tomorrow if it is the daily limit.'
+      :c===404||(c&&/model/i.test(e.message||''))?N+' could not use the model "'+gqModel()+'". Open settings and choose a current one.'
+      :c?N+' sent back an error: '+(e.message||c)
+      :e.name==='AbortError'?N+' took too long. Try again.'
+      :e.message==='shape'||e instanceof SyntaxError?'The answer came back in a shape I could not read. Try again.'
+      :'I could not reach '+N+'. Check your connection and try again.',true);
   }
   btn.disabled=false;btn.innerHTML=label;
 }
@@ -1048,7 +1068,7 @@ async function renderEditor(slug){
     </div>
     <div class="field"><label for="f-ing">Ingredients (one per line)</label><textarea id="f-ing" placeholder="2 cups flour&#10;1 egg">${esc(r.ingredients.join('\n'))}</textarea></div>
     <div class="field"><label for="f-steps">Method (one step per line)</label><textarea id="f-steps" style="min-height:200px" placeholder="Heat the oven to 350°F.">${esc(r.steps.join('\n\n'))}</textarea>
-      <div class="methodtools"><button type="button" class="btn groq" id="groqgo" data-act="groq"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18.5 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>Let Groq create the method</button><button type="button" class="btn quiet" data-act="groqset">Groq settings</button></div>
+      <div class="methodtools"><button type="button" class="btn groq" id="groqgo" data-act="groq"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18.5 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>Let AI create the method</button><button type="button" class="btn quiet" data-act="groqset">Method writer settings</button></div>
       <p class="gnote" id="gqnote" role="status" aria-live="polite" hidden></p></div>
     <div class="two">
       <div class="field"><label for="f-cats">Categories (commas between)</label><input id="f-cats" type="text" placeholder="Dessert, Baking" value="${esc(r.categories.join(', '))}"></div>
@@ -1058,6 +1078,7 @@ async function renderEditor(slug){
     <div class="field"><label for="f-src">Where it came from (a web address, if any)</label><input id="f-src" type="text" inputmode="url" value="${esc(r.source)}"></div>
     <div class="row"><button class="btn" id="fsave" type="submit">Save to my book</button><a class="btn quiet" href="${slug?'#/recipe/'+encodeURIComponent(slug):'#/'}">Cancel</a></div>
   </form></section>`;
+  gqLabel();
   $('#f-img').addEventListener('change',e=>{
     const f=e.target.files[0];if(!f)return;
     $('#prev').innerHTML=`<img src="${URL.createObjectURL(f)}" alt="Preview of the chosen photo">`;
