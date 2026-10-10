@@ -150,6 +150,7 @@ input[type=text],input[type=password],input[type=search],textarea{cursor:text}
 @keyframes lid{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-2.5px) rotate(-3deg)}}
 @media (prefers-reduced-motion:reduce){.loader .st,.loader .lid{animation:none}.loader .st{opacity:.8}}
 .fdetail ul{margin:6px 0 0;padding-left:20px;columns:1}
+.secret{-webkit-text-security:disc;text-security:disc}
 .gnote{margin:8px 0 0;font-size:16px;color:var(--ink-soft)}
 .gnote.err{color:#8a2f1f}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
@@ -362,7 +363,7 @@ dialog p{font-size:20px}
 <main class="page" id="app"><p class="note">Opening the book…</p></main>
 <p class="ver" id="ver"></p>
 <div id="toast" role="status" aria-live="polite"></div>
-<dialog id="sdlg"><form method="dialog">
+<dialog id="sdlg"><form autocomplete="off" method="dialog">
   <h2 style="font-size:26px">Settings</h2>
   <section class="sgroup"><h3>Saving</h3><div class="sbar" id="sbar"></div></section>
   <section class="sgroup"><h3>Backup</h3><p class="hint">A backup is a file with all your recipes and photos. Keep one somewhere safe.</p><div class="row"><button type="button" class="btn soft" data-act="backup">Save a backup</button><button type="button" class="btn soft" data-act="restore">Restore a backup</button></div><input type="file" id="restore" accept=".json,application/json" hidden></section>
@@ -370,8 +371,8 @@ dialog p{font-size:20px}
   <p class="hint" id="sver"></p>
   <div class="row"><button type="button" class="btn" data-close="close">Done</button></div>
 </form></dialog>
-<dialog id="dlg"><form method="dialog"><p id="dlgmsg"></p><div class="row"><button type="button" class="btn soft" data-close="no" id="dlgno">Keep it</button><button class="btn" value="yes" id="dlgyes">Remove it</button></div></form></dialog>
-<dialog id="gdlg"><form method="dialog">
+<dialog id="dlg"><form autocomplete="off" method="dialog"><p id="dlgmsg"></p><div class="row"><button type="button" class="btn soft" data-close="no" id="dlgno">Keep it</button><button class="btn" value="yes" id="dlgyes">Remove it</button></div></form></dialog>
+<dialog id="gdlg"><form autocomplete="off" method="dialog">
   <h2 style="font-size:26px">Save to Google Drive</h2>
   <p class="hint" id="gnote"></p>
   <div class="qs" id="gsteps" aria-live="polite"></div>
@@ -379,18 +380,18 @@ dialog p{font-size:20px}
   <p class="hint">Your recipes go in a folder called "Family Recipe Book" in your Drive. This page can only see that folder, nothing else.</p>
   <div class="row"><button class="btn" value="go">Save and connect</button><button type="button" class="btn soft" data-close="cancel">Cancel</button></div>
 </form></dialog>
-<dialog id="qdlg"><form method="dialog">
+<dialog id="qdlg"><form autocomplete="off" method="dialog">
   <h2 style="font-size:26px">Method writer settings</h2>
   <div class="field"><label for="qprov">Which service</label><select id="qprov"><option value="gemini">Google Gemini (free tier)</option><option value="openrouter">OpenRouter (free models)</option><option value="groq">Groq</option></select></div>
   <div class="qs" id="qsteps" aria-live="polite"></div>
   <p class="hint" id="qhelp"></p>
-  <div class="field"><label for="qkey">API key</label><input id="qkey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIza…"></div>
+  <div class="field"><label for="qkey">API key</label><input id="qkey" class="secret" type="text" name="ai-service-key" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text" enterkeyhint="done" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other" placeholder="AIza…"></div>
   <div class="field"><label for="qmodel">Model (leave empty for the default)</label><input id="qmodel" type="text" autocapitalize="off" spellcheck="false"></div>
   <p class="hint" id="qmhelp"></p>
   <div class="row"><button class="btn" value="go">Save</button><button type="button" class="btn soft" data-close="cancel">Cancel</button><button type="button" class="btn quiet" data-close="forget">Remove key</button></div>
 </form></dialog>
 <div id="tray" aria-live="polite"></div>
-<dialog id="tdlg"><form method="dialog">
+<dialog id="tdlg"><form autocomplete="off" method="dialog">
   <h2 style="font-size:26px">Set a timer</h2>
   <div class="row"><button type="button" class="pre" data-act="tpre" data-min="5">5 min</button><button type="button" class="pre" data-act="tpre" data-min="10">10 min</button><button type="button" class="pre" data-act="tpre" data-min="15">15 min</button><button type="button" class="pre" data-act="tpre" data-min="30">30 min</button><button type="button" class="pre" data-act="tpre" data-min="60">1 hour</button></div>
   <div class="field"><label for="tmin">Minutes</label><input id="tmin" type="number" inputmode="decimal" min="0.1" step="any" value="10"></div>
@@ -398,7 +399,7 @@ dialog p{font-size:20px}
   <p class="hint">Keep this page open. Phones can pause timers when the screen turns off.</p>
   <div class="row"><button class="btn" value="go">Start timer</button><button type="button" class="btn soft" data-close="cancel">Cancel</button></div>
 </form></dialog>
-<dialog id="ndlg"><form method="dialog"><h2 style="font-size:26px">What's for dinner?</h2><div id="ndbody"></div></form></dialog>
+<dialog id="ndlg"><form autocomplete="off" method="dialog"><h2 style="font-size:26px">What's for dinner?</h2><div id="ndbody"></div></form></dialog>
 <noscript><p style="padding:80px 60px">This recipe book needs JavaScript to open.</p></noscript>
 
 <script>
@@ -554,7 +555,7 @@ const cleanRecipe=(r,stamp)=>{
 const G={token:'',exp:0,client:null,folderId:'',fileId:'',lastMod:'',lastSync:0,busy:false,again:false,timer:0};
 const cid=()=>store.get('rb_gcid')||'';
 const canGoogle=()=>location.protocol==='https:'||location.hostname==='localhost';
-const VERSION='2.6';
+const VERSION='2.7';
 function driveBar(){
   if(G.token){
     const t=G.busy?'Saving to Google Drive…':G.lastSync?'Saved to Google Drive at '+new Date(G.lastSync).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'Connected to Google Drive';
@@ -1171,7 +1172,7 @@ const slim=(extra='')=>`<div class="slim"><a class="btn soft" href="#/">&larr; A
 async function renderHome(){
   app.innerHTML=masthead()+`
   <div class="controls">
-    <input class="search" id="q" type="search" placeholder="Search by name or ingredient" aria-label="Search recipes" value="${esc(S.query)}">
+    <input class="search" id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Search by name or ingredient" aria-label="Search recipes" value="${esc(S.query)}">
     <button class="btn soft" id="onlyfav" aria-pressed="${S.onlyFavs}" data-act="onlyfav">Hearted</button>
     <button class="btn soft" data-act="dinner">What's for dinner?</button>
     <a class="btn" href="#/new">Add a recipe</a>
@@ -1256,7 +1257,7 @@ async function renderEditor(slug){
   }
   S.cur=slug?r:null;
   app.innerHTML=slim()+`<section class="editor"><h1>${slug?'Edit this recipe':'A new recipe'}</h1>
-  <form id="rform" class="paper" data-slug="${esc(slug||'')}" novalidate>
+  <form autocomplete="off" id="rform" class="paper" data-slug="${esc(slug||'')}" novalidate>
     <p class="err" id="ferr" role="alert" hidden></p>
     <div class="field"><label for="f-name">Recipe name</label><input id="f-name" type="text" value="${esc(r.name)}" required></div>
     <div class="field"><label for="f-desc">A few words about it</label><textarea id="f-desc" style="min-height:90px">${esc(r.description)}</textarea></div>
