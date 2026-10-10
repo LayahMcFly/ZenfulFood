@@ -135,6 +135,20 @@ input[type=text],input[type=password],input[type=search],textarea{cursor:text}
 .fcard h3{font-size:18px;margin:10px 2px 2px;line-height:1.2}
 .fcard .meta{margin:0 2px;font:400 12px/1.4 var(--label);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
 .feed .skel{height:210px;background:var(--paper-lo);opacity:.55;border-radius:2px}
+.fchips{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 2px}
+.fchip{font:700 12px/1 var(--label);letter-spacing:.08em;text-transform:uppercase;color:var(--walnut);background:#e8d5b0;border:1px solid var(--line);padding:10px 14px;min-height:40px;border-radius:2px 14px 14px 2px;cursor:inherit}
+.fchip:hover{background:#f0dfbd}
+.fchip[aria-pressed=true]{background:var(--walnut);color:var(--linen);border-color:var(--walnut)}
+.fchip:focus-visible{outline:2px solid var(--rust);outline-offset:3px}
+.loader{display:grid;justify-items:center;gap:6px;padding:22px 0 18px}
+.loader .pot{width:76px;height:76px;fill:none;stroke:var(--walnut);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+.loader .st{stroke:var(--caramel);stroke-dasharray:6 5;animation:steam 1.8s ease-in-out infinite;opacity:.0}
+.loader .s2{animation-delay:.35s}.loader .s3{animation-delay:.7s}
+.loader .lid{transform-origin:32px 30px;animation:lid 1.1s ease-in-out infinite}
+.loader .lmsg{margin:0;font:400 20px/1.2 var(--hand);color:var(--rust);text-align:center;min-height:1.3em}
+@keyframes steam{0%{transform:translateY(6px);opacity:0}35%{opacity:.9}100%{transform:translateY(-6px);opacity:0}}
+@keyframes lid{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-2.5px) rotate(-3deg)}}
+@media (prefers-reduced-motion:reduce){.loader .st,.loader .lid{animation:none}.loader .st{opacity:.8}}
 .fdetail ul{margin:6px 0 0;padding-left:20px;columns:1}
 .gnote{margin:8px 0 0;font-size:16px;color:var(--ink-soft)}
 .gnote.err{color:#8a2f1f}
@@ -540,7 +554,7 @@ const cleanRecipe=(r,stamp)=>{
 const G={token:'',exp:0,client:null,folderId:'',fileId:'',lastMod:'',lastSync:0,busy:false,again:false,timer:0};
 const cid=()=>store.get('rb_gcid')||'';
 const canGoogle=()=>location.protocol==='https:'||location.hostname==='localhost';
-const VERSION='2.5';
+const VERSION='2.6';
 function driveBar(){
   if(G.token){
     const t=G.busy?'Saving to Google Drive…':G.lastSync?'Saved to Google Drive at '+new Date(G.lastSync).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'Connected to Google Drive';
@@ -1043,14 +1057,43 @@ async function ndWeb(){
   }
 }
 /* ---------- Online feed (TheMealDB, side scroll) ---------- */
-const FEED={items:[],busy:false,failed:false,tok:0};
+const MDB='https://www.themealdb.com/api/json/v1/'+mdbKey()+'/';
+const REGIONS={
+  world:{label:'Worldwide'},
+  asia:{label:'Asia',areas:['Chinese','Japanese','Indian','Thai','Vietnamese','Malaysian','Filipino']},
+  americas:{label:'Americas',areas:['American','Canadian','Mexican','Jamaican','Argentinian','Venezulan','Uruguayan']},
+  europe:{label:'Europe',areas:['British','French','Italian','Greek','Spanish','Portuguese','Polish','Dutch','Irish','Croatian','Russian','Ukrainian','Norwegian','Slovakian']},
+  mea:{label:'Africa & Middle East',areas:['Egyptian','Kenyan','Moroccan','Tunisian','Turkish','Algerian','Syrian','Saudi Arabian']},
+  sweet:{label:'Sweet',cats:['Dessert']},
+  veg:{label:'Vegetarian',cats:['Vegetarian']}
+};
+const FEED={items:[],busy:false,tok:0,region:'world',msg:0,timer:0};
+const LOADMSG=['Stirring the pot…','Tasting the soup…','Rolling out the dough…','Asking grandma…','Dusting off the flour…','Warming the oven…','Peeking in the pantry…'];
+const loaderHTML=m=>`<div class="loader" role="status"><svg class="pot" viewBox="0 0 64 64" aria-hidden="true"><path class="st s1" d="M22 22c-3-4 3-6 0-10"/><path class="st s2" d="M32 22c-3-4 3-6 0-10"/><path class="st s3" d="M42 22c-3-4 3-6 0-10"/><g class="lid"><path d="M18 30h28"/><path d="M29 30v-3h6v3"/></g><path d="M16 34h32v10a8 8 0 0 1-8 8H24a8 8 0 0 1-8-8z"/><path d="M12 36h4M48 36h4"/></svg><p class="lmsg">${esc(m||LOADMSG[0])}</p></div>`;
+function loaderTick(on){
+  clearInterval(FEED.timer);
+  if(!on)return;
+  FEED.timer=setInterval(()=>{FEED.msg=(FEED.msg+1)%LOADMSG.length;document.querySelectorAll('.lmsg').forEach(n=>n.textContent=LOADMSG[FEED.msg])},1700);
+}
+const thumbOK=u=>/^https:\/\/(www\.)?themealdb\.com\//.test(u||'')?u:'';
+const shuffleArr=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+async function mdbGet(path){
+  const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),10000);
+  try{
+    const r=await fetch(MDB+path,{signal:ctl.signal,cache:'no-store'});
+    if(!r.ok)throw new Error('x');
+    return await r.json();
+  }finally{clearTimeout(to)}
+}
 function feedShell(inner,withShuffle){
   const el=$('#feed');if(!el)return;
-  el.innerHTML=`<div class="feed-head"><h2 id="feedh">Online feed</h2>${withShuffle?'<button type="button" class="btn quiet" data-act="feedshuffle">Shuffle</button>':''}</div><p class="sub">Random recipes from TheMealDB. Needs the internet. The rest of your book works offline.</p>${inner}`;
+  el.innerHTML=`<div class="feed-head"><h2 id="feedh">Online feed</h2>${withShuffle?'<button type="button" class="btn quiet" data-act="feedshuffle">Shuffle</button>':''}</div><p class="sub">Random recipes from TheMealDB. Needs the internet. The rest of your book works offline.</p>
+  <div class="fchips" role="group" aria-label="Where in the world">${Object.entries(REGIONS).map(([k,v])=>`<button type="button" class="fchip" data-act="feedreg" data-r="${k}" aria-pressed="${FEED.region===k}">${esc(v.label)}</button>`).join('')}</div>${inner}`;
 }
 function feedPaint(){
   if(!$('#feed'))return;
-  if(FEED.busy){feedShell('<ul class="feed-row" aria-hidden="true">'+'<li><div class="skel"></div></li>'.repeat(5)+'</ul>',false);return}
+  loaderTick(FEED.busy);
+  if(FEED.busy){feedShell(loaderHTML(LOADMSG[FEED.msg]),false);return}
   if(!FEED.items.length){
     feedShell(`<p class="note">${navigator.onLine===false?'You are offline right now, so the feed is resting.':'I could not load the feed. Check your connection and try again.'}</p><div><button type="button" class="btn soft" data-act="feedshuffle">Try again</button></div>`,false);return;
   }
@@ -1059,34 +1102,52 @@ function feedPaint(){
 async function feedLoad(){
   if(FEED.busy)return;
   if(navigator.onLine===false){FEED.items=[];feedPaint();return}
-  FEED.busy=true;const tok=++FEED.tok;feedPaint();
-  const one=async()=>{
-    const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),10000);
-    try{
-      const r=await fetch(`https://www.themealdb.com/api/json/v1/${encodeURIComponent(mdbKey())}/random.php`,{signal:ctl.signal,cache:'no-store'});
-      if(!r.ok)throw new Error('x');
-      const j=await r.json();if(!j.meals||!j.meals[0])throw new Error('x');
-      return mealToRecipe(j.meals[0]);
-    }finally{clearTimeout(to)}
-  };
-  const res=await Promise.allSettled(Array.from({length:10},one));
+  FEED.busy=true;FEED.msg=Math.floor(Math.random()*LOADMSG.length);const tok=++FEED.tok;feedPaint();
+  const R=REGIONS[FEED.region]||REGIONS.world;
+  let items=[];
+  try{
+    if(!R.areas&&!R.cats){
+      const res=await Promise.allSettled(Array.from({length:10},async()=>{const j=await mdbGet('random.php');if(!j.meals||!j.meals[0])throw new Error('x');return mealToRecipe(j.meals[0])}));
+      items=res.filter(x=>x.status==='fulfilled').map(x=>x.value);
+    }else{
+      const jobs=(R.areas||[]).map(v=>['a',v]).concat((R.cats||[]).map(v=>['c',v]));
+      const res=await Promise.allSettled(jobs.map(async([k,v])=>{
+        const j=await mdbGet('filter.php?'+k+'='+encodeURIComponent(v));
+        return (j.meals||[]).map(m=>({id:m.idMeal,name:m.strMeal,thumb:thumbOK(m.strMealThumb),tags:k==='a'?[v]:[],categories:k==='c'?[v]:[],ingredients:null,steps:null}));
+      }));
+      items=shuffleArr(res.filter(x=>x.status==='fulfilled').flatMap(x=>x.value));
+    }
+  }catch{}
   if(tok!==FEED.tok)return;
   const seen=new Set();
-  FEED.items=res.filter(x=>x.status==='fulfilled').map(x=>x.value).filter(m=>m.id&&!seen.has(m.id)&&seen.add(m.id));
+  FEED.items=items.filter(m=>m.id&&!seen.has(m.id)&&seen.add(m.id)).slice(0,10);
   FEED.busy=false;feedPaint();
 }
 function feedInit(force){
   if(!$('#feed'))return;
   if(force||(!FEED.items.length&&!FEED.busy))feedLoad();else feedPaint();
 }
-function feedOpen(i){
-  const m=FEED.items[i];if(!m)return;
-  ND.web=m;
+function feedDetail(m){
   $('#ndbody').innerHTML=`<p class="eyebrow">Online feed</p><div class="photo">${imgTag(m.thumb,m.name)}</div><h3>${esc(m.name)}</h3><p class="meta">${esc([m.tags[0],m.categories[0],m.ingredients.length+' ingredients'].filter(Boolean).join(' · '))}</p>
   <div class="fdetail"><ul>${m.ingredients.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
   <p class="hint">This one is not in your book yet. Save it to keep it, and to use cook mode, timers and the serving scaler.</p>
   <div class="row"><button type="button" class="btn" data-act="ndsave">Save to my book</button><button type="button" class="btn soft" data-close="cancel">Close</button></div>`;
-  $('#ndlg').showModal();
+}
+async function feedOpen(i){
+  const m=FEED.items[i];if(!m)return;
+  const d=$('#ndlg');
+  if(m.ingredients){ND.web=m;feedDetail(m);d.showModal();return}
+  ND.web=null;$('#ndbody').innerHTML=`<p class="eyebrow">Online feed</p><h3>${esc(m.name)}</h3>${loaderHTML('Opening the recipe card…')}`;
+  d.showModal();
+  try{
+    const j=await mdbGet('lookup.php?i='+encodeURIComponent(m.id));
+    if(!j.meals||!j.meals[0])throw new Error('x');
+    const f=mealToRecipe(j.meals[0]);
+    Object.assign(m,f,{tags:f.tags.length?f.tags:m.tags,thumb:f.thumb||m.thumb});
+    if(!d.open)return;ND.web=m;feedDetail(m);
+  }catch{
+    if(d.open)$('#ndbody').innerHTML=`<p class="err" role="alert">I couldn't open that recipe. Check your connection and try again.</p><div class="row"><button type="button" class="btn soft" data-close="cancel">Close</button></div>`;
+  }
 }
 async function ndSave(){
   const m=ND.web;if(!m)return;
@@ -1289,6 +1350,7 @@ document.addEventListener('click',async e=>{
   if(a==='ndbook'){ND.web=null;return ndBook()}
   if(a==='ndweb')return ndWeb();
   if(a==='feedshuffle')return feedInit(true);
+  if(a==='feedreg'){if(FEED.busy||FEED.region===b.dataset.r)return;FEED.region=b.dataset.r;return feedLoad()}
   if(a==='feedopen')return feedOpen(+b.dataset.i);
   if(a==='ndsave')return ndSave().catch(()=>toast('I could not save that recipe.'));
   if(a==='ndclose'){$('#ndlg').close();return}
