@@ -353,7 +353,6 @@ dialog p{font-size:20px}
   <section class="sgroup"><h3>Saving</h3><div class="sbar" id="sbar"></div></section>
   <section class="sgroup"><h3>Backup</h3><p class="hint">A backup is a file with all your recipes and photos. Keep one somewhere safe.</p><div class="row"><button type="button" class="btn soft" data-act="backup">Save a backup</button><button type="button" class="btn soft" data-act="restore">Restore a backup</button></div><input type="file" id="restore" accept=".json,application/json" hidden></section>
   <section class="sgroup"><h3>Method writer</h3><p class="hint">Lets an AI write the method from your ingredients. Choose a service and add your key.</p><div class="row"><button type="button" class="btn soft" data-act="groqset">Method writer settings</button></div></section>
-  <section class="sgroup"><h3>Recipe finder</h3><p class="hint">"Try something new" in What's for dinner? pulls a random recipe from TheMealDB. It needs your own key.</p><div class="row"><button type="button" class="btn soft" data-act="mdbset">Recipe finder key</button></div></section>
   <p class="hint" id="sver"></p>
   <div class="row"><button type="button" class="btn" data-close="close">Done</button></div>
 </form></dialog>
@@ -541,7 +540,7 @@ const cleanRecipe=(r,stamp)=>{
 const G={token:'',exp:0,client:null,folderId:'',fileId:'',lastMod:'',lastSync:0,busy:false,again:false,timer:0};
 const cid=()=>store.get('rb_gcid')||'';
 const canGoogle=()=>location.protocol==='https:'||location.hostname==='localhost';
-const VERSION='2.4';
+const VERSION='2.5';
 function driveBar(){
   if(G.token){
     const t=G.busy?'Saving to Google Drive…':G.lastSync?'Saved to Google Drive at '+new Date(G.lastSync).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'Connected to Google Drive';
@@ -998,24 +997,7 @@ document.addEventListener('touchend',e=>{
 
 /* ---------- What's for dinner? ---------- */
 const ND={last:'',fav:false,web:null};
-const mdbKey=()=>(store.get('rb_mdb')||'').trim();
-let NDFROM=false;
-let NDFEED=false;
-function ndKeyPanel(fromSettings,feed){
-  NDFROM=!!fromSettings;NDFEED=!!feed;
-  const d=$('#ndlg'),body=$('#ndbody');
-  body.innerHTML=`<p class="eyebrow">Recipe finder key</p>
-  <div class="qs"><h3>Add your own TheMealDB key</h3>
-  <p>1. Open the TheMealDB page below. It lists the key you can use.</p>
-  <a class="btn soft go" href="https://www.themealdb.com/api.php" target="_blank" rel="noopener noreferrer">Open themealdb.com/api.php</a>
-  <p>2. Copy the key. Their page offers a free test key for personal use, and a private key for their supporters.</p>
-  <p>3. Paste it here and tap Save.</p></div>
-  <div class="field"><label for="ndkey">TheMealDB key</label><input id="ndkey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(mdbKey())}"></div>
-  <p class="hint">Your key stays in this browser only. It is not saved in this web page, Google Drive or backups.</p>
-  <div class="row"><button type="button" class="btn" data-act="ndkeysave">Save</button><button type="button" class="btn soft" data-close="cancel">Cancel</button>${mdbKey()?'<button type="button" class="btn quiet" data-act="ndkeyoff">Remove key</button>':''}</div>`;
-  if(!d.open)d.showModal();
-}
-document.addEventListener('close',e=>{if(e.target.id==='ndlg')NDFEED=false;if(e.target.id==='ndlg'&&NDFROM){NDFROM=false;setTimeout(()=>{$('#sbar').innerHTML=driveBar();$('#sdlg').showModal()},0)}},true);
+const mdbKey=()=>'1'; /* TheMealDB's public test key. It is listed on themealdb.com/api.php, so it is not private. */
 function ndOpen(){
   const d=$('#ndlg');ND.web=null;ndBook();
   if(!d.open)d.showModal();
@@ -1043,7 +1025,6 @@ function mealToRecipe(m){
     categories:m.strCategory?[m.strCategory]:[],tags,ingredients:ing,steps,source:'https://www.themealdb.com/meal/'+m.idMeal};
 }
 async function ndWeb(){
-  if(!mdbKey())return ndKeyPanel(false);
   const body=$('#ndbody');
   body.innerHTML='<p class="note">Looking through someone else\'s cookbook…</p>';
   try{
@@ -1058,7 +1039,7 @@ async function ndWeb(){
     <p class="hint">This one is not in your book yet.</p>
     <div class="row"><button type="button" class="btn" data-act="ndsave">Save to my book</button><button type="button" class="btn soft" data-act="ndweb">Another one</button><button type="button" class="btn soft" data-act="ndbook">Back to my book</button></div>`;
   }catch(e){console.warn('mealdb',e);
-    body.innerHTML=`<p class="err" role="alert">I couldn't get a recipe from TheMealDB. Check your connection and your key in Settings, then try again.</p><div class="row"><button type="button" class="btn soft" data-act="ndbook">Back to my book</button><button type="button" class="btn quiet" data-act="ndclose">Close</button></div>`;
+    body.innerHTML=`<p class="err" role="alert">I couldn't get a recipe from TheMealDB. Check your connection and try again.</p><div class="row"><button type="button" class="btn soft" data-act="ndbook">Back to my book</button><button type="button" class="btn quiet" data-act="ndclose">Close</button></div>`;
   }
 }
 /* ---------- Online feed (TheMealDB, side scroll) ---------- */
@@ -1069,17 +1050,13 @@ function feedShell(inner,withShuffle){
 }
 function feedPaint(){
   if(!$('#feed'))return;
-  if(!mdbKey()){
-    feedShell('<div><button type="button" class="btn soft" data-act="feedkey">Add your TheMealDB key</button></div>',false);return;
-  }
   if(FEED.busy){feedShell('<ul class="feed-row" aria-hidden="true">'+'<li><div class="skel"></div></li>'.repeat(5)+'</ul>',false);return}
   if(!FEED.items.length){
-    feedShell(`<p class="note">${navigator.onLine===false?'You are offline right now, so the feed is resting.':'I could not load the feed. Check your connection and your key in Settings.'}</p><div><button type="button" class="btn soft" data-act="feedshuffle">Try again</button></div>`,false);return;
+    feedShell(`<p class="note">${navigator.onLine===false?'You are offline right now, so the feed is resting.':'I could not load the feed. Check your connection and try again.'}</p><div><button type="button" class="btn soft" data-act="feedshuffle">Try again</button></div>`,false);return;
   }
   feedShell('<ul class="feed-row" tabindex="0" aria-label="Random recipes, scroll sideways">'+FEED.items.map((m,i)=>`<li><button type="button" class="fcard" data-act="feedopen" data-i="${i}"><div class="photo">${imgTag(m.thumb,m.name)}</div><h3>${esc(m.name)}</h3><p class="meta">${esc([m.tags[0],m.categories[0]].filter(Boolean).join(' · '))}</p></button></li>`).join('')+'</ul>',true);
 }
 async function feedLoad(){
-  if(!mdbKey()){feedPaint();return}
   if(FEED.busy)return;
   if(navigator.onLine===false){FEED.items=[];feedPaint();return}
   FEED.busy=true;const tok=++FEED.tok;feedPaint();
@@ -1104,7 +1081,7 @@ function feedInit(force){
 }
 function feedOpen(i){
   const m=FEED.items[i];if(!m)return;
-  ND.web=m;NDFROM=false;
+  ND.web=m;
   $('#ndbody').innerHTML=`<p class="eyebrow">Online feed</p><div class="photo">${imgTag(m.thumb,m.name)}</div><h3>${esc(m.name)}</h3><p class="meta">${esc([m.tags[0],m.categories[0],m.ingredients.length+' ingredients'].filter(Boolean).join(' · '))}</p>
   <div class="fdetail"><ul>${m.ingredients.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
   <p class="hint">This one is not in your book yet. Save it to keep it, and to use cook mode, timers and the serving scaler.</p>
@@ -1312,11 +1289,7 @@ document.addEventListener('click',async e=>{
   if(a==='ndbook'){ND.web=null;return ndBook()}
   if(a==='ndweb')return ndWeb();
   if(a==='feedshuffle')return feedInit(true);
-  if(a==='feedkey')return ndKeyPanel(false,true);
   if(a==='feedopen')return feedOpen(+b.dataset.i);
-  if(a==='ndkeysave'){const k=$('#ndkey').value.trim();if(!k){toast('Paste your key first.');return}store.set('rb_mdb',k);FEED.items=[];toast('Key saved on this device.');if(NDFEED){NDFEED=false;$('#ndlg').close();feedInit(true);return}if(NDFROM){$('#ndlg').close();return}return ndWeb()}
-  if(a==='ndkeyoff'){store.del('rb_mdb');FEED.items=[];toast('Key removed.');if(NDFROM)$('#ndlg').close();else ndBook();return}
-  if(a==='mdbset'){$('#sdlg').close();return ndKeyPanel(true)}
   if(a==='ndsave')return ndSave().catch(()=>toast('I could not save that recipe.'));
   if(a==='ndclose'){$('#ndlg').close();return}
   if(a==='gdrive')return connectDrive();
